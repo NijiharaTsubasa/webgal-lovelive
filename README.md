@@ -2,7 +2,7 @@
 
 本项目 Fork 自 [WebGAL_MyGO专版引擎](https://github.com/boomwwww/webgal-mygo/)
 
-**项目当前正在封闭开发中**，由于作者精力有限，恕暂不提供可用的模型和动作，请等待正式发布~
+**项目当前正在冲刺开发中**，由于作者精力有限，恕正式发布前暂不提供可用的模型和动作，如您希望事先试用，可参考[model-converter 仓库](https://github.com/NijiharaTsubasa/webgal-lovelive-model-converter)中的相关说明，自行转换原始游戏的模型为本项目可用格式。但请注意，正式发布前格式随时可能（也很大概率会）发生破坏性变动，转换产物可能无法在最终正式版工作，还请谅解。
 
 ## 特色功能
 
