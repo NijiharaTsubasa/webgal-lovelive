@@ -4,6 +4,8 @@
 
 **项目当前正在冲刺开发中**，由于作者精力有限，恕正式发布前暂不提供可用的模型和动作，如您希望事先试用，可参考[model-converter 仓库](https://github.com/NijiharaTsubasa/webgal-lovelive-model-converter)中的相关说明，自行转换原始游戏的模型为本项目可用格式。但请注意，正式发布前格式随时可能（也很大概率会）发生破坏性变动，转换产物可能无法在最终正式版工作，还请谅解。
 
+<img width="1920" height="1032" alt="实际运行效果" src="https://github.com/user-attachments/assets/e0636cef-c92e-4210-a350-297bfd5552d6" />
+
 ## 特色功能
 
 #### glTF 3D 立绘及 3D 通用动作支持
