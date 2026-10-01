@@ -11,7 +11,7 @@ async function characterOptions(url: string, width: number, height: number) {
   if (globals.live2dPromise) await globals.live2dPromise;
   return {
     modelUrl: new URL(url, document.baseURI).href,
-    indexUrl: new URL('./game/figure/3d/resources.json', document.baseURI).href,
+    indexUrl: new URL('./game/gltf-resources.json', document.baseURI).href,
     runtime: globalThis,
     // A full-stage transparent canvas makes the existing left/right figure
     // placement converge on the center. Keep a portrait footprint, shared by
@@ -30,7 +30,7 @@ export async function preloadGltfCharacter(url: string, width: number, height: n
 
 export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  await OffscreenCharacter.preloadNamed(new URL('./game/figure/3d/resources.json', document.baseURI).href, requests);
+  await OffscreenCharacter.preloadNamed(new URL('./game/gltf-resources.json', document.baseURI).href, requests);
 }
 
 export async function createGltfCharacter(url: string, width: number, height: number) {
