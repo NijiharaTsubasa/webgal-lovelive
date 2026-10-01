@@ -20,6 +20,8 @@ import { GifResource } from './GifResource';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import { queryStageObjectReferenceBox, type QueryTargetReferenceBoxResult } from './referenceBox';
 import { assignPixiTransform } from './stageEffectTransform';
+import { createGltfCharacter, type GltfCharacterRuntime } from './gltfCharacter';
+import { GltfCharacterSprite } from './GltfCharacterSprite';
 
 export interface IAnimationObject {
   setStartState: Function;
@@ -45,7 +47,9 @@ export interface IStageObject {
   // 相关的源 url
   sourceUrl: string;
   sourceExt: string;
-  sourceType: 'img' | 'live2d' | 'spine' | 'gif' | 'video' | 'stage';
+  sourceType: 'img' | 'live2d' | 'spine' | 'gltf' | 'gif' | 'video' | 'stage';
+  gltfRuntime?: GltfCharacterRuntime;
+  disposeGltf?: () => void;
   spineAnimation?: string;
   /** 创建这个立绘时用的身份，见 syncPixiStageState 的 getFigureIdentity */
   figureIdentity?: string;
@@ -573,6 +577,94 @@ export default class PixiStage {
 
   // 聚合模型
   /* eslint-disable complexity */
+  public addGltfFigure(key: string, url: string, presetPosition: IFigurePosition = 'center') {
+    this.removeStageObjectByKey(key);
+    const container = new WebGALPixiContainer();
+    this.applyFigureMetadata(container, key);
+    const object: IStageObject = {
+      uuid: uuid(),
+      key,
+      sourceUrl: url,
+      sourceExt: 'json',
+      sourceType: 'gltf',
+      pixiContainer: container,
+    };
+    this.figureContainer.addChild(container);
+    this.figureObjects.push(object);
+    const bounds = stageStateManager.getViewStageState().live2dMotion.find((item) => item.target === key)?.overrideBounds;
+    let disposed = false;
+    let texture: PIXI.Texture | undefined;
+    let runtime: GltfCharacterRuntime | undefined;
+    const app = this.currentApp;
+    const tick = () => {
+      if (disposed || !runtime || !texture) return;
+      try {
+        runtime.update((app?.ticker.deltaMS ?? 0) / 1000);
+        texture.baseTexture.update();
+      } catch (error) {
+        logger.error('glTF character update failed', error);
+        object.disposeGltf?.();
+        if (this.getStageObjByUuid(object.uuid)) this.removeStageObjectByKey(object.key);
+      }
+    };
+    object.disposeGltf = () => {
+      if (disposed) return;
+      disposed = true;
+      app?.ticker.remove(tick);
+      runtime?.dispose();
+      texture?.destroy(true);
+      object.gltfRuntime = undefined;
+    };
+    // A container may also be destroyed by an owner other than removeStageObjectByKey.
+    container.once('destroyed', object.disposeGltf);
+    void createGltfCharacter(url, this.stageWidth, this.stageHeight)
+      .then((loaded) => {
+        if (disposed || !this.getStageObjByUuid(object.uuid)) {
+          loaded.dispose();
+          return;
+        }
+        runtime = loaded;
+        object.gltfRuntime = loaded;
+        texture = PIXI.Texture.from(loaded.canvas);
+        const sprite = new GltfCharacterSprite(texture, bounds);
+        this.setContainerInitialPosition({
+          container,
+          childContainer: sprite,
+          originalWidth: sprite.width,
+          originalHeight: sprite.height,
+          position: presetPosition,
+          isLive2DFigure: true,
+          overrideBounds: bounds,
+        });
+        if (!['left', 'right', 'center'].includes(presetPosition)) {
+          container.setBaseX(sprite.getBaseX(presetPosition, this.stageWidth));
+        }
+        // Retiring objects retain their own runtime, and must never consume a new figure's state.
+        if (!object.isExiting) {
+          const state = stageStateManager.getViewStageState();
+          loaded.setMotion(state.live2dMotion.find((item) => item.target === object.key)?.motion ?? '');
+          loaded.setExpression(state.live2dExpression.find((item) => item.target === object.key)?.expression ?? '');
+          loaded.setBlinkParameters({
+            ...baseBlinkParam,
+            ...state.live2dBlink.find((item) => item.target === object.key)?.blink,
+          });
+          const mouth = this.getCurrentMouthValue(object.key);
+          loaded.setMouth(mouth === null ? null : mouth < 50 ? 0 : Math.min(1, (mouth - 50) / 50));
+        }
+        loaded.update(0);
+        texture.baseTexture.update();
+        app?.ticker.add(tick);
+        this.notifyTargetReferenceBoxChanged(object.key);
+        this.requestRender();
+      })
+      .catch((error) => {
+        object.disposeGltf?.();
+        // Remove only this failed instance, including if it was renamed for its exit.
+        if (this.getStageObjByUuid(object.uuid)) this.removeStageObjectByKey(object.key);
+        logger.error('glTF character load failed', error);
+      });
+  }
+
   public async addJsonlFigure(key: string, jsonlPath: string, presetPosition: IFigurePosition = 'center') {
     console.log('正在使用聚合模型');
     if (Live2D.isAvailable !== true) return;
@@ -1165,6 +1257,10 @@ export default class PixiStage {
   public changeModelMotionByKey(key: string, motion: string) {
     // logger.debug(`Applying motion ${motion} to ${key}`);
     const target = this.figureObjects.find((e) => e.key === key && !e.isExiting);
+    if (target?.sourceType === 'gltf') {
+      target.gltfRuntime?.setMotion(motion);
+      return;
+    }
     if (target?.sourceType === 'live2d') {
       const figureRecordTarget = this.live2dFigureRecorder.find((e) => e.target === key);
       if (target && figureRecordTarget?.motion !== motion) {
@@ -1272,6 +1368,10 @@ export default class PixiStage {
   public changeModelExpressionByKey(key: string, expression: string) {
     // logger.debug(`Applying expression ${expression} to ${key}`);
     const target = this.figureObjects.find((e) => e.key === key && !e.isExiting);
+    if (target?.sourceType === 'gltf') {
+      target.gltfRuntime?.setExpression(expression);
+      return;
+    }
     if (target?.sourceType !== 'live2d') return;
     const figureRecordTarget = this.live2dFigureRecorder.find((e) => e.target === key);
     if (target && figureRecordTarget?.expression !== expression) {
@@ -1288,6 +1388,10 @@ export default class PixiStage {
 
   public changeModelBlinkByKey(key: string, blinkParam: BlinkParam) {
     const target = this.figureObjects.find((e) => e.key === key && !e.isExiting);
+    if (target?.sourceType === 'gltf') {
+      target.gltfRuntime?.setBlinkParameters({ ...baseBlinkParam, ...blinkParam });
+      return;
+    }
     if (target?.sourceType !== 'live2d') return;
     const figureRecordTarget = this.live2dFigureRecorder.find((e) => e.target === key);
     if (target && !isEqual(figureRecordTarget?.blink, blinkParam)) {
@@ -1335,6 +1439,7 @@ export default class PixiStage {
 
     const paramY = mapToZeroOne(y);
     const target = this.figureObjects.find((e) => e.key === key);
+    if (target?.sourceType === 'gltf' && !target.isExiting) target.gltfRuntime?.setMouth(paramY);
     if (target && target.sourceType === 'live2d') {
       const container = target.pixiContainer;
       if (!container) return;
@@ -1374,6 +1479,7 @@ export default class PixiStage {
     // Clear the stored mouth value so beforeModelUpdate stops overriding the motion
     this.currentMouthValues.delete(key);
     const target = this.figureObjects.find((e) => e.key === key);
+    if (target?.sourceType === 'gltf' && !target.isExiting) target.gltfRuntime?.setMouth(null);
     if (target && target.sourceType === 'live2d') {
       const container = target.pixiContainer;
       if (!container) return;
@@ -1446,6 +1552,7 @@ export default class PixiStage {
     const indexBg = this.backgroundObjects.findIndex((e) => e.key === key);
     if (indexFig >= 0) {
       const bgSprite = this.figureObjects[indexFig];
+      bgSprite.disposeGltf?.();
       if (bgSprite.pixiContainer)
         for (const element of bgSprite.pixiContainer.children) {
           element.destroy();
@@ -1787,6 +1894,7 @@ export default class PixiStage {
         (obj) =>
           obj.sourceType === 'live2d' ||
           obj.sourceType === 'spine' ||
+          obj.sourceType === 'gltf' ||
           obj.sourceType === 'video' ||
           obj.sourceType === 'gif',
       );

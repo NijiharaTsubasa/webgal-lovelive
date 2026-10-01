@@ -3,6 +3,7 @@ import { logger } from '../logger';
 
 import { WebGAL } from '@/Core/WebGAL';
 import { fileType } from '@/Core/util/gameAssetsAccess/assetSetter';
+import { isGltfCharacterUrl, preloadGltfCharacter } from '@/Core/controller/stage/pixi/gltfCharacter';
 
 interface IAssetsPrefetcherOptions {
   /**
@@ -74,9 +75,13 @@ const runAssetsPrefetchQueue = () => {
   }
   isAssetPrefetchQueueRunning = true;
   const nextAsset = assetPrefetchQueue.shift() as IAsset;
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
-      prefetchByLinkElement(nextAsset);
+      if (nextAsset.type === fileType.figure && isGltfCharacterUrl(nextAsset.url)) {
+        await preloadGltfCharacter(nextAsset.url, WebGAL.stageWidth, WebGAL.stageHeight);
+      } else {
+        prefetchByLinkElement(nextAsset);
+      }
     } catch (e) {
       logger.warn(`预加载资源失败，将允许重试：${nextAsset.url}`, e);
       WebGAL.sceneManager.settledAssets.delete(nextAsset.url);

@@ -191,6 +191,12 @@
       (() => {
         const deviceInfo = window.__WEBGAL_DEVICE_INFO__ ?? { isIOS: false };
         const isIOS = deviceInfo.isIOS;
+        const layoutConfig = {
+          viewport: isIOS
+            ? 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+            : 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no',
+          hideEffectBackground: isIOS,
+        };
         // const layoutConfig = isIOS
         //   ? {
         //       bottomInset: 15,
@@ -208,7 +214,7 @@
         // const root = document.querySelector('#root');
         // const titleEnter = document.querySelector('.html-body__title-enter');
         // const effectBackground = document.querySelector('.html-body__effect-background');
-        // let viewportMeta = document.querySelector('meta[name="viewport"]');
+        let viewportMeta = document.querySelector('meta[name="viewport"]');
 
         const ensureViewportMeta = () => {
           if (!viewportMeta) {

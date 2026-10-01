@@ -1074,6 +1074,30 @@
     eventemitter3 "^3.1.0"
     url "^0.11.0"
 
+"@pixiv/three-vrm-springbone@3.5.5":
+  version "3.5.5"
+  resolved "https://registry.npmmirror.com/@pixiv/three-vrm-springbone/-/three-vrm-springbone-3.5.5.tgz#05a549c7c71ac468ba5cb0c39bc8a2e9ea3fc108"
+  integrity sha512-GWAWrIegGH/u1ZA+Es03Qzc2yafrQOrhtal9jzUIAgU8Wm2DYuqAABOY+du/9RpBRK8D4T8DBPvRGQqvfrQ/uA==
+  dependencies:
+    "@pixiv/types-vrm-0.0" "3.5.5"
+    "@pixiv/types-vrmc-springbone-1.0" "3.5.5"
+    "@pixiv/types-vrmc-springbone-extended-collider-1.0" "3.5.5"
+
+"@pixiv/types-vrm-0.0@3.5.5":
+  version "3.5.5"
+  resolved "https://registry.npmmirror.com/@pixiv/types-vrm-0.0/-/types-vrm-0.0-3.5.5.tgz#a7bd26a758fa5e716ace4393049a4d31c610e72b"
+  integrity sha512-2S/0jswMjJTwL9ky8YzDR0CIaP6ZmE+HFuyW/0h+SA+awELf+J7WGgC8lTLM1MXzokO7Z2YVljU2F0fEhlKDIQ==
+
+"@pixiv/types-vrmc-springbone-1.0@3.5.5":
+  version "3.5.5"
+  resolved "https://registry.npmmirror.com/@pixiv/types-vrmc-springbone-1.0/-/types-vrmc-springbone-1.0-3.5.5.tgz#0fd862c039da0bd2026775c0afeb91a748430ab7"
+  integrity sha512-gRQ5Y7PaGiMefvOrJ3hvoSPqpA67jiwyhwh8ItjsPi3yri/Hn3CeXplW3Cbx3ZPbfu+C3Q2MCRa2TqAUOjeMRA==
+
+"@pixiv/types-vrmc-springbone-extended-collider-1.0@3.5.5":
+  version "3.5.5"
+  resolved "https://registry.npmmirror.com/@pixiv/types-vrmc-springbone-extended-collider-1.0/-/types-vrmc-springbone-extended-collider-1.0-3.5.5.tgz#164b34070b0ee4e890061ab4041af6a477800baf"
+  integrity sha512-+6RxLaAvVguP7upjS/OT4viNPWvac1HBRQY1nmdvfYNQuCMdrMsCZqvy2af0Fcjnda4V9JbKFIpZDC0lrw1+uQ==
+
 "@reduxjs/toolkit@^1.8.1":
   version "1.9.7"
   resolved "https://registry.yarnpkg.com/@reduxjs/toolkit/-/toolkit-1.9.7.tgz#7fc07c0b0ebec52043f8cb43510cf346405f78a6"
@@ -6121,6 +6145,11 @@ test-exclude@^6.0.0:
     "@istanbuljs/schema" "^0.1.2"
     glob "^7.1.4"
     minimatch "^3.0.4"
+
+three@^0.185.0:
+  version "0.185.1"
+  resolved "https://registry.npmmirror.com/three/-/three-0.185.1.tgz#63e9e241a17b101e211965121a017b4b4d8054ae"
+  integrity sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==
 
 through@^2.3.8:
   version "2.3.8"

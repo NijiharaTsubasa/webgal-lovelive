@@ -49,7 +49,7 @@ export function generateTimelineObj(
       duration,
       ease: easeArray,
       onUpdate: (updateValue) => {
-        if (container) {
+        if (container && !container.destroyed) {
           const { scaleX, scaleY, ...val } = updateValue;
           // @ts-ignore
           PixiStage.assignTransform(container, omitBy(val, isUndefined));
@@ -59,13 +59,16 @@ export function generateTimelineObj(
         }
       },
     });
+    // An asynchronous figure load can fail while its entrance is still
+    // running. The timeline captures the instance, not just the stage key.
+    container?.once('destroyed', forceStopWithoutSetEndState);
   }
 
   /**
    * 在此书写为动画设置初态的操作
    */
   function setStartState() {
-    if (target?.pixiContainer) {
+    if (target?.pixiContainer && !target.pixiContainer.destroyed) {
       // 不能赋值到 position，因为 x 和 y 被 WebGALPixiContainer 代理，而 position 属性没有代理
       const { position, scale, ...state } = getStartStateEffect();
       const assignValue = omitBy({ x: position?.x, y: position?.y, ...state }, isUndefined);
@@ -86,11 +89,8 @@ export function generateTimelineObj(
    * 在此书写为动画设置终态的操作
    */
   function setEndState() {
-    if (!container) {
-      return;
-    }
-    if (animateInstance) animateInstance.stop();
-    animateInstance = null;
+    forceStopWithoutSetEndState();
+    if (!container || container.destroyed) return;
     if (target?.pixiContainer) {
       // 不能赋值到 position，因为 x 和 y 被 WebGALPixiContainer 代理，而 position 属性没有代理
       // 不能赋值到 position，因为 x 和 y 被 WebGALPixiContainer 代理，而 position 属性没有代理
@@ -126,6 +126,7 @@ export function generateTimelineObj(
   function forceStopWithoutSetEndState() {
     if (animateInstance) animateInstance.stop();
     animateInstance = null;
+    container?.removeListener('destroyed', forceStopWithoutSetEndState);
   }
 
   return {

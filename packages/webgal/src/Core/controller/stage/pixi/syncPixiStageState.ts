@@ -13,6 +13,7 @@ import { getAnimateDuration, getExitAnimation } from '@/Core/Modules/animationFu
 import { logger } from '@/Core/util/logger';
 import { setEbg } from '@/Core/gameScripts/changeBg/setEbg';
 import { applyTransformToPixiContainer } from '@/Core/controller/stage/pixi/stageEffectTransform';
+import { isGltfCharacterUrl } from './gltfCharacter';
 
 interface ISyncFigureSlotPayload {
   key: string;
@@ -280,7 +281,9 @@ function addFigure(key: string, url: string, position: IFigurePosition) {
   const baseUrl = window.location.origin;
   const urlObject = new URL(url, baseUrl);
   const figureType = urlObject.searchParams.get('type') as 'image' | 'live2D' | 'spine' | 'video' | null;
-  if (url.endsWith('.json')) {
+  if (isGltfCharacterUrl(url)) {
+    pixiStage.addGltfFigure(key, url, position);
+  } else if (url.endsWith('.json')) {
     pixiStage.addLive2dFigure(key, url, position);
   } else if (url.endsWith('.wmdl')) {
     pixiStage.addWmdlFigure(key, url, position);

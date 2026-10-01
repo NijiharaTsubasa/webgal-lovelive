@@ -1,22 +1,20 @@
 {
   "schemaVersion": "1.0.0",
-  "id": "webgal-mygo.mygo",
-  "name": "WebGAL MyGO",
+  "id": "webgal-lovelive.lovelive",
+  "name": "WebGAL LoveLive",
   "version": "3.2.1",
   "type": "custom",
   "webgalVersion": "4.6.4",
-  "description": "MyGO专版引擎",
+  "description": "LoveLive专版引擎（Fork自MyGO!!!!!专版引擎）",
   "descriptions": {
-    "en": "A web Visual Novel engine made exclusively for MyGO",
-    "ja": "MyGO専用のウェブビジュアルノベルエンジン",
-    "ko": "MyGO를 위해 제작된 웹 비주얼 노벨 엔진",
-    "fr": "Un moteur de visual novel sur le web, spécialement conçu pour MyGO"
+    "en": "A web Visual Novel engine made exclusively for LoveLive and MyGO",
+    "ja": "ラブライブ・バンドリ専用のウェブビジュアルノベルエンジン"
   },
-  "maintainer": "WebGAL MyGO Team",
+  "maintainer": "NijiharaTsubasa",
   "license": "MPL-2.0",
   "icon": "icons/icon-512.png",
   "urls": {
-    "repository": "https://github.com/boomwwww/webgal-mygo",
-    "bugs": "https://github.com/boomwwww/webgal-mygo/issues"
+    "repository": "https://github.com/NijiharaTsubasa/webgal-lovelive",
+    "bugs": "https://github.com/NijiharaTsubasa/webgal-lovelive/issues"
   }
 }
