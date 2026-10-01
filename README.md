@@ -1,6 +1,6 @@
 # WebGAL_LoveLive专版引擎
 
-本项目 Fork 自 ![WebGAL_MyGO专版引擎](https://github.com/boomwwww/webgal-mygo/)
+本项目 Fork 自 [WebGAL_MyGO专版引擎](https://github.com/boomwwww/webgal-mygo/)
 
 **项目当前正在封闭开发中**，由于作者精力有限，恕暂不提供可用的模型和动作，请等待正式发布~
 
