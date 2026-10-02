@@ -19,7 +19,12 @@ async function characterOptions(url: string, width: number, height: number) {
     width: Math.min(width, Math.round(height * 0.75)),
     height,
     // Match the native portrait's head-to-hip composition, not a full-body thumbnail.
-    framing: { viewHeight: 1.36, centerY: 1.16 },
+    framing: {
+      viewHeight: 1.36 / 1.18,
+      centerY: 1.195,
+      // Portrait composition: 50 stage units down at 1440px and M_3_1_0's 1.25 fit.
+      groupOffsets: { llas: (50 / (1440 * 1.25)) * (1.36 / 1.18) },
+    },
   };
 }
 
