@@ -599,7 +599,7 @@ export default class PixiStage {
     const tick = () => {
       if (disposed || !runtime || !texture) return;
       try {
-        runtime.update((app?.ticker.deltaMS ?? 0) / 1000);
+        runtime.update(((app?.ticker.elapsedMS ?? 0) * (app?.ticker.speed ?? 1)) / 1000);
         texture.baseTexture.update();
       } catch (error) {
         logger.error('glTF character update failed', error);
