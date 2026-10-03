@@ -21,6 +21,7 @@ export const changeScene = (sceneUrl: string, sceneName: string) => {
   // 场景写入到运行时
   const sceneWritePromise = sceneFetcher(sceneUrl)
     .then((rawScene) => {
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
       WebGAL.sceneManager.sceneData.currentScene = sceneParser(rawScene, sceneName, sceneUrl);
       WebGAL.sceneManager.sceneData.currentSentenceId = 0;
       clearPrefetchLinks();
@@ -30,9 +31,11 @@ export const changeScene = (sceneUrl: string, sceneName: string) => {
       shouldAutoNext = !isFastPreviewSceneWrite;
     })
     .catch((e) => {
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
       logger.error('场景调用错误', e);
     })
     .finally(() => {
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
       WebGAL.sceneManager.lockSceneWrite = false;
       if (WebGAL.sceneManager.sceneWritePromise === sceneWritePromise) {
         WebGAL.sceneManager.sceneWritePromise = null;

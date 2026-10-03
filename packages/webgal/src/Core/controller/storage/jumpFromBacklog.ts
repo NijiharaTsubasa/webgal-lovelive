@@ -1,6 +1,5 @@
+import { restoreStageScene } from './restoreStageScene';
 import { logger } from '../../util/logger';
-import { sceneFetcher } from '../scene/sceneFetcher';
-import { sceneParser } from '../../parser/sceneParser';
 import { IStageState } from '@/Core/Modules/stage/stageInterface';
 import { webgalStore } from '@/store/store';
 import { setVisibility } from '@/store/GUIReducer';
@@ -40,50 +39,39 @@ export const restorePerform = (skipAnimation = false) => {
 export const jumpFromBacklog = (index: number, refetchScene = true) => {
   const dispatch = webgalStore.dispatch;
   // 获得存档文件
-  const backlogFile = WebGAL.backlogManager.getBacklog()[index];
+  const backlogFile = cloneDeep(WebGAL.backlogManager.getBacklog()[index]);
+  if (!backlogFile) return;
   logger.debug('读取的backlog数据', backlogFile);
-  // 重新获取并同步场景状态
-  if (refetchScene)
-    sceneFetcher(backlogFile.saveScene.sceneUrl).then((rawScene) => {
-      WebGAL.sceneManager.sceneData.currentScene = sceneParser(
-        rawScene,
-        backlogFile.saveScene.sceneName,
-        backlogFile.saveScene.sceneUrl,
-      );
-      WebGAL.sceneManager.settledScenes.add(WebGAL.sceneManager.sceneData.currentScene.sceneUrl); // 放入已加载场景列表，避免递归加载相同场景
-    });
-  WebGAL.sceneManager.sceneData.currentSentenceId = backlogFile.saveScene.currentSentenceId;
-  WebGAL.sceneManager.sceneData.sceneStack = cloneDeep(backlogFile.saveScene.sceneStack);
-  WebGAL.sceneManager.sceneData.currentLocals = cloneDeep(backlogFile.saveScene.currentLocals ?? {}); // 旧存档没有此字段
+  return restoreStageScene(backlogFile.saveScene, () => {
+    // 强制停止所有演出
+    stopAllPerform();
 
-  // 强制停止所有演出
-  stopAllPerform();
+    // 弹出backlog项目到指定状态
+    for (let i = WebGAL.backlogManager.getBacklog().length - 1; i > index; i--) {
+      WebGAL.backlogManager.getBacklog().pop();
+    }
 
-  // 弹出backlog项目到指定状态
-  for (let i = WebGAL.backlogManager.getBacklog().length - 1; i > index; i--) {
-    WebGAL.backlogManager.getBacklog().pop();
-  }
+    // 要记录本句 Backlog
+    WebGAL.backlogManager.isSaveBacklogNext = true;
 
-  // 要记录本句 Backlog
-  WebGAL.backlogManager.isSaveBacklogNext = true;
+    // 恢复舞台状态
+    const newStageState: IStageState = cloneDeep(backlogFile.currentStageState);
 
-  // 恢复舞台状态
-  const newStageState: IStageState = cloneDeep(backlogFile.currentStageState);
+    // 确保原先未读的文本在使用 backlog 时能正确显示为已读文本
+    newStageState.isRead = true;
 
-  // 确保原先未读的文本在使用 backlog 时能正确显示为已读文本
-  newStageState.isRead = true;
+    stageStateManager.replaceCalculationStageState(newStageState);
 
-  stageStateManager.replaceCalculationStageState(newStageState);
+    // 恢复演出
+    restorePerform();
 
-  // 恢复演出
-  restorePerform();
+    // 关闭backlog界面
+    dispatch(setVisibility({ component: 'showBacklog', visibility: false }));
 
-  // 关闭backlog界面
-  dispatch(setVisibility({ component: 'showBacklog', visibility: false }));
+    // 重新显示 TextBox
+    dispatch(setVisibility({ component: 'showTextBox', visibility: true }));
 
-  // 重新显示 TextBox
-  dispatch(setVisibility({ component: 'showTextBox', visibility: true }));
-
-  // 重新渲染
-  WebGAL.gameplay.pixiStage?.requestRender();
+    // 重新渲染
+    WebGAL.gameplay.pixiStage?.requestRender();
+  }, refetchScene);
 };

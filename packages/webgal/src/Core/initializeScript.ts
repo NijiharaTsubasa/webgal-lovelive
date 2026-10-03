@@ -56,12 +56,14 @@ export const initializeScript = async (): Promise<void> => {
   });
   // 获取游戏信息
   await infoFetcher('./game/config.txt');
+  const { prefetchCurrentSceneByProgress } = await import('@/Core/util/prefetcher/progressPrefetcher');
   /**
    * 启动Pixi
    */
   WebGAL.gameplay.pixiStage = new PixiStage();
   stageStateManager.setCommitHandler((stageState, options) => {
     syncPixiStageState(stageState, options);
+    if (options.syncPixiStage) prefetchCurrentSceneByProgress();
     if (options.notifyReact) autoFastSaveGame();
   });
 

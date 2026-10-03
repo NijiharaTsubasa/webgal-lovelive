@@ -45,6 +45,7 @@ export class SceneManager {
     this.sceneData.currentScene = cloneDeep(initSceneData.currentScene);
     this.sceneData.currentLocals = {};
     this.sceneWritePromise = null;
+    this.lockSceneWrite = false;
     this.settledScenes.clear();
     this.settledAssets.clear();
   }
@@ -55,11 +56,11 @@ export class SceneManager {
    * @param locals 被调用场景的局部变量
    * @param writeReturnTo 返回值写回当前帧的哪个变量
    */
-  public pushFrame(locals: IGameVar, writeReturnTo?: string) {
+  public pushFrame(locals: IGameVar, writeReturnTo?: string, continueLine = this.sceneData.currentSentenceId) {
     this.sceneData.sceneStack.push({
       sceneName: this.sceneData.currentScene.sceneName,
       sceneUrl: this.sceneData.currentScene.sceneUrl,
-      continueLine: this.sceneData.currentSentenceId,
+      continueLine,
       locals: this.sceneData.currentLocals,
       writeReturnTo,
     });

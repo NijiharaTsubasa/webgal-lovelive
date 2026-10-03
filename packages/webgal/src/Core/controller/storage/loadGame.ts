@@ -1,7 +1,6 @@
+import { restoreStageScene } from './restoreStageScene';
 import { ISaveData } from '@/store/userDataInterface';
 import { logger } from '../../util/logger';
-import { sceneFetcher } from '../scene/sceneFetcher';
-import { sceneParser } from '../../parser/sceneParser';
 import { webgalStore } from '@/store/store';
 import { setVisibility } from '@/store/GUIReducer';
 import { restorePerform } from './jumpFromBacklog';
@@ -30,44 +29,33 @@ export function loadGameFromStageData(stageData: ISaveData) {
     logger.info('暂无存档');
     return;
   }
-  const loadFile = stageData;
-  // 重新获取并同步场景状态
-  sceneFetcher(loadFile.sceneData.sceneUrl).then((rawScene) => {
-    WebGAL.sceneManager.sceneData.currentScene = sceneParser(
-      rawScene,
-      loadFile.sceneData.sceneName,
-      loadFile.sceneData.sceneUrl,
-    );
-    WebGAL.sceneManager.settledScenes.add(WebGAL.sceneManager.sceneData.currentScene.sceneUrl); // 放入已加载场景列表，避免递归加载相同场景
+  const loadFile = cloneDeep(stageData);
+  return restoreStageScene(loadFile.sceneData, () => {
+    // 强制停止所有演出
+    stopAllPerform();
+
+    // 恢复backlog
+    const newBacklog = loadFile.backlog;
+    WebGAL.backlogManager.getBacklog().splice(0, WebGAL.backlogManager.getBacklog().length); // 清空原backlog
+    for (const e of newBacklog) {
+      WebGAL.backlogManager.getBacklog().push(e);
+    }
+
+    // 恢复舞台状态
+    const newStageState = cloneDeep(loadFile.nowStageState);
+    // 确保原先未读的文本在 load 时能正确显示为已读文本
+    newStageState.isRead = true;
+    const dispatch = webgalStore.dispatch;
+    stageStateManager.replaceCalculationStageState(newStageState);
+
+    // 恢复演出
+    restorePerform(true);
+
+    dispatch(setVisibility({ component: 'showTitle', visibility: false }));
+    dispatch(setVisibility({ component: 'showMenuPanel', visibility: false }));
+    /**
+     * 恢复模糊背景
+     */
+    setEbg(newStageState.bgName, 0);
   });
-  WebGAL.sceneManager.sceneData.currentSentenceId = loadFile.sceneData.currentSentenceId;
-  WebGAL.sceneManager.sceneData.sceneStack = cloneDeep(loadFile.sceneData.sceneStack);
-  WebGAL.sceneManager.sceneData.currentLocals = cloneDeep(loadFile.sceneData.currentLocals ?? {}); // 旧存档没有此字段
-
-  // 强制停止所有演出
-  stopAllPerform();
-
-  // 恢复backlog
-  const newBacklog = loadFile.backlog;
-  WebGAL.backlogManager.getBacklog().splice(0, WebGAL.backlogManager.getBacklog().length); // 清空原backlog
-  for (const e of newBacklog) {
-    WebGAL.backlogManager.getBacklog().push(e);
-  }
-
-  // 恢复舞台状态
-  const newStageState = cloneDeep(loadFile.nowStageState);
-  // 确保原先未读的文本在 load 时能正确显示为已读文本
-  newStageState.isRead = true;
-  const dispatch = webgalStore.dispatch;
-  stageStateManager.replaceCalculationStageState(newStageState);
-
-  // 恢复演出
-  restorePerform(true);
-
-  dispatch(setVisibility({ component: 'showTitle', visibility: false }));
-  dispatch(setVisibility({ component: 'showMenuPanel', visibility: false }));
-  /**
-   * 恢复模糊背景
-   */
-  setEbg(newStageState.bgName, 0);
 }

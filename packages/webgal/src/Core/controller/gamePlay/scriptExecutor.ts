@@ -10,7 +10,6 @@ import { WebGAL } from '@/Core/WebGAL';
 import { getBooleanArgByKey, getStringArgByKey } from '@/Core/util/getSentenceArg';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import { jumpToLabel } from '@/Core/gameScripts/label/jumpToLabel';
-import { prefetchCurrentSceneByProgress } from '@/Core/util/prefetcher/progressPrefetcher';
 import { WEBGAL_NONE } from '@/Core/constants';
 
 const MAX_FORWARD_SCRIPT_EXECUTION = 1000;
@@ -54,7 +53,6 @@ export const scriptExecutor = (depth = 0, options: ScriptExecutionOptions = {}) 
     return;
   }
 
-  prefetchCurrentSceneByProgress();
   // 超过总语句数量，则从场景栈拿出一个需要继续的场景，然后继续流程。若场景栈清空，则停止流程
   if (
     WebGAL.sceneManager.sceneData.currentSentenceId >

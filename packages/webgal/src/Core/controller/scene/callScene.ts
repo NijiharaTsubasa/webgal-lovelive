@@ -26,12 +26,14 @@ export const callScene = (sceneUrl: string, sceneName: string, locals: IGameVar 
   WebGAL.sceneManager.lockSceneWrite = true;
   const isFastPreviewSceneWrite = WebGAL.gameplay.isFastPreview;
   let shouldAutoNext = false;
-  // 先将本场景压入场景栈
-  WebGAL.sceneManager.pushFrame(locals, writeReturnTo);
+  const continueLine = WebGAL.sceneManager.sceneData.currentSentenceId;
   // 场景写入到运行时
   const sceneWritePromise = sceneFetcher(sceneUrl)
     .then((rawScene) => {
-      WebGAL.sceneManager.sceneData.currentScene = sceneParser(rawScene, sceneName, sceneUrl);
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
+      const scene = sceneParser(rawScene, sceneName, sceneUrl);
+      WebGAL.sceneManager.pushFrame(locals, writeReturnTo, continueLine);
+      WebGAL.sceneManager.sceneData.currentScene = scene;
       WebGAL.sceneManager.sceneData.currentSentenceId = 0;
       clearPrefetchLinks();
       WebGAL.sceneManager.settledScenes.add(sceneUrl); // 放入已加载场景列表，避免递归加载相同场景
@@ -40,11 +42,11 @@ export const callScene = (sceneUrl: string, sceneName: string, locals: IGameVar 
       shouldAutoNext = !isFastPreviewSceneWrite;
     })
     .catch((e) => {
-      // 场景没写进来，之前压入的帧要弹回去，否则调用方会带着被调用方的局部变量继续跑
-      WebGAL.sceneManager.popFrame();
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
       logger.error('场景调用错误', e);
     })
     .finally(() => {
+      if (WebGAL.sceneManager.sceneWritePromise !== sceneWritePromise) return;
       WebGAL.sceneManager.lockSceneWrite = false;
       if (WebGAL.sceneManager.sceneWritePromise === sceneWritePromise) {
         WebGAL.sceneManager.sceneWritePromise = null;

@@ -3,13 +3,14 @@ import { logger } from '../logger';
 
 import { WebGAL } from '@/Core/WebGAL';
 import { fileType } from '@/Core/util/gameAssetsAccess/assetSetter';
-import { isGltfCharacterUrl, preloadGltfCharacter } from '@/Core/controller/stage/pixi/gltfCharacter';
+import { isGltfCharacterUrl } from '@/Core/controller/stage/pixi/gltfCharacter';
 
 interface IAssetsPrefetcherOptions {
   /**
    * 默认会限制为“场景开头窗口”资源，避免 parser 一次性触发整场景预加载。
    */
   ignoreLineGate?: boolean;
+  priority?: boolean;
 }
 
 const INITIAL_PARSE_LINE_LOOKAHEAD = 24;
@@ -77,11 +78,7 @@ const runAssetsPrefetchQueue = () => {
   const nextAsset = assetPrefetchQueue.shift() as IAsset;
   setTimeout(async () => {
     try {
-      if (nextAsset.type === fileType.figure && isGltfCharacterUrl(nextAsset.url)) {
-        await preloadGltfCharacter(nextAsset.url, WebGAL.stageWidth, WebGAL.stageHeight);
-      } else {
-        prefetchByLinkElement(nextAsset);
-      }
+      prefetchByLinkElement(nextAsset);
     } catch (e) {
       logger.warn(`预加载资源失败，将允许重试：${nextAsset.url}`, e);
       WebGAL.sceneManager.settledAssets.delete(nextAsset.url);
@@ -114,11 +111,20 @@ export const assetsPrefetcher = (assetList: Array<IAsset>, options: IAssetsPrefe
   //   return;
   // }
   const filteredAssetList = uniqueAssetsByUrl(assetList).filter((asset) => {
+    // Model instances are scheduled by future stage occurrence, not URL history.
+    if (asset.type === fileType.figure && isGltfCharacterUrl(asset.url)) return false;
     if (options.ignoreLineGate) {
       return true;
     }
     return asset.lineNumber <= INITIAL_PARSE_LINE_LOOKAHEAD;
   });
+  if (options.priority) {
+    const wanted = new Set(filteredAssetList.map(asset => asset.url));
+    const promoted = assetPrefetchQueue.filter(asset => wanted.has(asset.url));
+    const other = assetPrefetchQueue.filter(asset => !wanted.has(asset.url));
+    assetPrefetchQueue.splice(0, assetPrefetchQueue.length, ...promoted, ...other);
+  }
+  const added: IAsset[] = [];
   for (const asset of filteredAssetList) {
     // 判断是否已经存在
     const hasPrefetch = WebGAL.sceneManager.settledAssets.has(asset.url) || queuedAssetUrlSet.has(asset.url);
@@ -128,8 +134,10 @@ export const assetsPrefetcher = (assetList: Array<IAsset>, options: IAssetsPrefe
       logger.info(`现在预加载资源${asset.url}，触发行号：${asset.lineNumber}`);
       WebGAL.sceneManager.settledAssets.add(asset.url);
       queuedAssetUrlSet.add(asset.url);
-      assetPrefetchQueue.push(asset);
-      runAssetsPrefetchQueue();
+      added.push(asset);
     }
   }
+  if (options.priority) assetPrefetchQueue.unshift(...added);
+  else assetPrefetchQueue.push(...added);
+  runAssetsPrefetchQueue();
 };

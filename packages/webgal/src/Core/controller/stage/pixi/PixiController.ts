@@ -617,14 +617,32 @@ export default class PixiStage {
     };
     // A container may also be destroyed by an owner other than removeStageObjectByKey.
     container.once('destroyed', object.disposeGltf);
-    void createGltfCharacter(url, this.stageWidth, this.stageHeight)
-      .then((loaded) => {
+    const initialState = stageStateManager.getViewStageState();
+    void createGltfCharacter(url, this.stageWidth, this.stageHeight, {
+      motion: initialState.live2dMotion.find(item => item.target === key)?.motion ?? '',
+      expression: initialState.live2dExpression.find(item => item.target === key)?.expression ?? '',
+    })
+      .then(async (loaded) => {
         if (disposed || !this.getStageObjByUuid(object.uuid)) {
           loaded.dispose();
           return;
         }
         runtime = loaded;
         object.gltfRuntime = loaded;
+        // Retiring objects retain their own runtime, and must never consume a new figure's state.
+        if (!object.isExiting) {
+          const state = stageStateManager.getViewStageState();
+          loaded.setMotion(state.live2dMotion.find((item) => item.target === object.key)?.motion ?? '');
+          loaded.setExpression(state.live2dExpression.find((item) => item.target === object.key)?.expression ?? '');
+          loaded.setBlinkParameters({
+            ...baseBlinkParam,
+            ...state.live2dBlink.find((item) => item.target === object.key)?.blink,
+          });
+          const mouth = this.getCurrentMouthValue(object.key);
+          loaded.setMouth(mouth === null ? null : mouth < 50 ? 0 : Math.min(1, (mouth - 50) / 50));
+        }
+        await loaded.prepare();
+        if (disposed || !this.getStageObjByUuid(object.uuid)) return;
         texture = PIXI.Texture.from(loaded.canvas);
         const sprite = new GltfCharacterSprite(texture, bounds);
         this.setContainerInitialPosition({
@@ -639,19 +657,6 @@ export default class PixiStage {
         if (!['left', 'right', 'center'].includes(presetPosition)) {
           container.setBaseX(sprite.getBaseX(presetPosition, this.stageWidth));
         }
-        // Retiring objects retain their own runtime, and must never consume a new figure's state.
-        if (!object.isExiting) {
-          const state = stageStateManager.getViewStageState();
-          loaded.setMotion(state.live2dMotion.find((item) => item.target === object.key)?.motion ?? '');
-          loaded.setExpression(state.live2dExpression.find((item) => item.target === object.key)?.expression ?? '');
-          loaded.setBlinkParameters({
-            ...baseBlinkParam,
-            ...state.live2dBlink.find((item) => item.target === object.key)?.blink,
-          });
-          const mouth = this.getCurrentMouthValue(object.key);
-          loaded.setMouth(mouth === null ? null : mouth < 50 ? 0 : Math.min(1, (mouth - 50) / 50));
-        }
-        loaded.update(0);
         texture.baseTexture.update();
         app?.ticker.add(tick);
         this.notifyTargetReferenceBoxChanged(object.key);

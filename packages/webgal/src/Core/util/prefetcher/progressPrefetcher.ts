@@ -1,68 +1,95 @@
-import { IScene } from '@/Core/controller/scene/sceneInterface';
+import { commandType, IScene } from '@/Core/controller/scene/sceneInterface';
 import { assetsPrefetcher } from '@/Core/util/prefetcher/assetsPrefetcher';
-import { scenePrefetcher } from '@/Core/util/prefetcher/scenePrefetcher';
 import { WebGAL } from '@/Core/WebGAL';
-import { isGltfCharacterUrl, preloadGltfNamedResources } from '@/Core/controller/stage/pixi/gltfCharacter';
+import { setGltfPreloadRequests, preloadGltfNamedResources } from '@/Core/controller/stage/pixi/gltfCharacter';
 import { logger } from '@/Core/util/logger';
+import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
+import { planGltfPreloads, planGltfChoiceBranch, mergeGltfBranchPlans, type GltfPreloadPlan } from './gltfPrefetchPlan';
+import { scenePrefetcher } from './scenePrefetcher';
 
-const PROGRESS_ASSET_LOOKAHEAD = 20;
-const PROGRESS_SUB_SCENE_LOOKAHEAD = 36;
-let lastProgressPrefetchMark = '';
+let previousScene: IScene | undefined;
+let previousSentence = -1;
+let visit = 0;
+let hasGltfPlan = false;
+let generation = 0;
+const choiceScenes = new Map<string, Promise<string>>();
+const parsedChoiceScenes = new Map<string, IScene>();
 
-const uniqueAssetsByUrl = (scene: IScene, startLine: number, lookahead: number) => {
-  const assetMap = new Map<string, IScene['assetsList'][number]>();
-  for (const sentence of scene.sentenceList.slice(startLine, startLine + lookahead + 1)) {
-    for (const asset of sentence.sentenceAssets) {
-      if (asset.url && !assetMap.has(asset.url)) {
-        assetMap.set(asset.url, asset);
+function applyPlan(plan: GltfPreloadPlan) {
+  if (plan.requests.length || hasGltfPlan) {
+    hasGltfPlan = plan.requests.length > 0;
+    void setGltfPreloadRequests(plan.requests, WebGAL.stageWidth, WebGAL.stageHeight)
+      .catch(error => logger.warn('glTF 实例预热失败', error));
+  }
+  if (plan.named.length) {
+    void preloadGltfNamedResources(plan.named).catch(error => logger.warn('glTF 动作/表情预加载失败', error));
+  }
+  assetsPrefetcher(plan.sentences.flatMap(sentence => sentence.sentenceAssets),
+    { ignoreLineGate: true, priority: true });
+}
+
+/** Refresh after a committed stage state, including restores and scene returns. */
+export const prefetchSceneByProgress = (scene: IScene, currentSentenceId: number) => {
+  const currentGeneration = ++generation;
+  if (scene !== previousScene || currentSentenceId < previousSentence) visit++;
+  previousScene = scene;
+  previousSentence = currentSentenceId;
+  const state = stageStateManager.getViewStageState();
+  const currentVisit = `${visit}:${scene.sceneUrl}`;
+  const plan = planGltfPreloads(scene, Math.max(0, currentSentenceId), state, currentVisit);
+  const branches = plan.choice?.branches ?? [];
+  const branchPlans = branches.map((branch, index) => branch.scene
+    ? (parsedChoiceScenes.has(branch.target)
+      ? planGltfChoiceBranch(plan, index, parsedChoiceScenes.get(branch.target)!, state, currentVisit) : undefined)
+    : planGltfChoiceBranch(plan, index, scene, state, currentVisit));
+  applyPlan(mergeGltfBranchPlans(plan, branchPlans));
+  // Keep only the currently reachable scene texts; pending fetches cannot publish stale plans.
+  const targets = new Set(branches.filter(branch => branch.scene).map(branch => branch.target));
+  for (const url of choiceScenes.keys()) if (!targets.has(url)) choiceScenes.delete(url);
+  for (const url of parsedChoiceScenes.keys()) if (!targets.has(url)) parsedChoiceScenes.delete(url);
+  branches.forEach((branch, index) => {
+    if (!branch.scene || branchPlans[index]) return;
+    void (async () => {
+      try {
+        // Lazy imports keep the parser/engine initialization graph acyclic.
+        const [{ sceneFetcher }, { sceneParser }] = await Promise.all([
+          import('@/Core/controller/scene/sceneFetcher'), import('@/Core/parser/sceneParser'),
+        ]);
+        if (generation !== currentGeneration) return;
+        let pending = choiceScenes.get(branch.target);
+        if (!pending) {
+          pending = sceneFetcher(branch.target);
+          choiceScenes.set(branch.target, pending);
+          const request = pending;
+          void pending.catch(() => {
+            if (choiceScenes.get(branch.target) === request) choiceScenes.delete(branch.target);
+          });
+        }
+        const raw = await pending;
+        if (generation !== currentGeneration) return;
+        let targetScene = parsedChoiceScenes.get(branch.target);
+        if (!targetScene) {
+          targetScene = sceneParser(raw, branch.target, branch.target);
+          parsedChoiceScenes.set(branch.target, targetScene);
+        }
+        branchPlans[index] = planGltfChoiceBranch(plan, index, targetScene, state, currentVisit);
+        applyPlan(mergeGltfBranchPlans(plan, branchPlans));
+      } catch (error) {
+        if (generation === currentGeneration) logger.warn('glTF 选择分支预加载失败', error);
       }
-    }
+    })();
+  });
+  const subScenes = new Set<string>();
+  let commands = 0;
+  for (const sentence of scene.sentenceList.slice(Math.max(0, currentSentenceId), currentSentenceId + 2000)) {
+    if (sentence.isLineBreakHolder || sentence.command === commandType.comment) continue;
+    if (++commands > 36) break;
+    for (const url of sentence.subScene) if (url && !targets.has(url)) subScenes.add(url);
   }
-  return [...assetMap.values()];
+  if (subScenes.size) scenePrefetcher([...subScenes]);
 };
 
-const uniqueSubScenes = (scene: IScene, startLine: number, lookahead: number) => {
-  const sceneSet = new Set<string>();
-  for (const sentence of scene.sentenceList.slice(startLine, startLine + lookahead + 1)) {
-    for (const subScene of sentence.subScene) {
-      if (subScene) {
-        sceneSet.add(subScene);
-      }
-    }
-  }
-  return [...sceneSet];
-};
-
-export const prefetchSceneByProgress = (scene: IScene, currentSentenceId: number, force = false) => {
-  if (!scene.sceneUrl) {
-    return;
-  }
-  const mark = `${scene.sceneUrl}#${currentSentenceId}`;
-  if (!force && mark === lastProgressPrefetchMark) {
-    return;
-  }
-  lastProgressPrefetchMark = mark;
-  const startLine = Math.max(0, currentSentenceId);
-  const nextAssets = uniqueAssetsByUrl(scene, startLine, PROGRESS_ASSET_LOOKAHEAD);
-  const nextSubScenes = uniqueSubScenes(scene, startLine, PROGRESS_SUB_SCENE_LOOKAHEAD);
-  const hasGltf = nextAssets.some(asset => isGltfCharacterUrl(asset.url))
-    || WebGAL.gameplay.pixiStage?.figureObjects.some(object => object.sourceType === 'gltf');
-  if (hasGltf) {
-    const requests = scene.sentenceList.slice(startLine, startLine + PROGRESS_ASSET_LOOKAHEAD + 1)
-      .flatMap(sentence => sentence.args.flatMap(arg =>
-        (arg.key === 'motion' || arg.key === 'expression') && typeof arg.value === 'string' && arg.value
-          ? [{ kind: arg.key as 'motion' | 'expression', name: arg.value }] : []));
-    void preloadGltfNamedResources(requests).catch(error => logger.warn('glTF 动作/表情预加载失败', error));
-  }
-  if (nextAssets.length > 0) {
-    assetsPrefetcher(nextAssets, { ignoreLineGate: true });
-  }
-  if (nextSubScenes.length > 0) {
-    scenePrefetcher(nextSubScenes);
-  }
-};
-
-export const prefetchCurrentSceneByProgress = (force = false) => {
+export const prefetchCurrentSceneByProgress = () => {
   const { currentScene, currentSentenceId } = WebGAL.sceneManager.sceneData;
-  prefetchSceneByProgress(currentScene, currentSentenceId, force);
+  prefetchSceneByProgress(currentScene, currentSentenceId);
 };

@@ -1,5 +1,10 @@
 import type { OffscreenCharacter } from 'webgal-lovelive-gltf-renderer';
 import type { BlinkParam } from '@/Core/live2DCore';
+import type { GltfPreloadRequest } from '@/Core/util/prefetcher/gltfPrefetchPlan';
+
+export interface GltfInitialState { motion?: string; expression?: string }
+const pendingClaims = new Set<Promise<void>>();
+let preloadGeneration = 0;
 
 /** Package entry points are config.json; ordinary Live2D model.json is unaffected. */
 export function isGltfCharacterUrl(url: string): boolean {
@@ -13,6 +18,8 @@ async function characterOptions(url: string, width: number, height: number) {
     modelUrl: new URL(url, document.baseURI).href,
     indexUrl: new URL('./game/gltf-resources.json', document.baseURI).href,
     runtime: globalThis,
+    motion: '',
+    expression: '',
     // A full-stage transparent canvas makes the existing left/right figure
     // placement converge on the center. Keep a portrait footprint, shared by
     // preload and display so the warmed instance is reusable.
@@ -34,15 +41,42 @@ export async function preloadGltfCharacter(url: string, width: number, height: n
 }
 
 export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
+  if (!requests.length) return;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
   await OffscreenCharacter.preloadNamed(new URL('./game/gltf-resources.json', document.baseURI).href, requests);
 }
 
-export async function createGltfCharacter(url: string, width: number, height: number) {
+export async function setGltfPreloadRequests(requests: GltfPreloadRequest[], width: number, height: number) {
+  const generation = ++preloadGeneration;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  const options = await characterOptions(url, width, height);
-  const character = (await OffscreenCharacter.takePreloaded(options)) ?? (await OffscreenCharacter.create(options));
-  return new GltfCharacterRuntime(character);
+  const options = await Promise.all(requests.map(async request => ({
+    ...await characterOptions(request.url, width, height), motion: request.motion,
+    expression: request.expression, preloadId: request.preloadId,
+  })));
+  // Stage creation claims the previous plan before a commit replaces it. A claim
+  // waits only for options/import, never for model preparation to complete.
+  while (pendingClaims.size) await Promise.all([...pendingClaims]);
+  if (generation !== preloadGeneration) return;
+  await OffscreenCharacter.setPreloadRequests(options);
+}
+
+export async function createGltfCharacter(url: string, width: number, height: number, initial: GltfInitialState = {}) {
+  let release!: () => void;
+  const claim = new Promise<void>(resolve => { release = resolve; });
+  pendingClaims.add(claim);
+  try {
+    const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
+    const options = { ...await characterOptions(url, width, height),
+      motion: initial.motion ?? '', expression: initial.expression ?? '' };
+    const pending = OffscreenCharacter.takePreloaded(options);
+    pendingClaims.delete(claim);
+    release();
+    const character = (await pending) ?? (await OffscreenCharacter.create(options));
+    return new GltfCharacterRuntime(character, options);
+  } finally {
+    pendingClaims.delete(claim);
+    release();
+  }
 }
 
 /** Owns commands and lifetime independently of the mutable stage-object key. */
@@ -52,24 +86,49 @@ export class GltfCharacterRuntime {
   private motion: string | undefined;
   private expression: string | undefined;
   private blink: BlinkParam | undefined;
-  public constructor(private readonly character: OffscreenCharacter) {}
+  private commandErrors: Partial<Record<'motion' | 'expression', unknown>> = {};
+  private commandGenerations = { motion: 0, expression: 0 };
+  public constructor(private readonly character: OffscreenCharacter, initial: GltfInitialState = {}) {
+    this.motion = initial.motion;
+    this.expression = initial.expression;
+  }
   public get canvas(): HTMLCanvasElement {
     return this.character.canvas;
   }
-  private enqueue(command: () => Promise<void>) {
+  private enqueue(kind: 'motion' | 'expression', command: () => Promise<void>) {
+    const generation = ++this.commandGenerations[kind];
+    delete this.commandErrors[kind];
     this.commands = this.commands
       .then(() => (this.disposed ? undefined : command()))
-      .catch((error) => console.error('glTF character command failed', error));
+      .catch((error) => {
+        if (generation === this.commandGenerations[kind]) {
+          this[kind] = undefined;
+          this.commandErrors[kind] = error;
+        }
+        console.error('glTF character command failed', error);
+      });
   }
   public setMotion(name: string) {
     if (this.motion === name) return;
     this.motion = name;
-    this.enqueue(() => this.character.setMotion(name));
+    this.enqueue('motion', () => this.character.setMotion(name));
   }
   public setExpression(name: string) {
     if (this.expression === name) return;
     this.expression = name;
-    this.enqueue(() => this.character.setExpression(name));
+    this.enqueue('expression', () => this.character.setExpression(name));
+  }
+  /** Call before attaching the ticker; commands arriving during preparation are included. */
+  public async prepare() {
+    let snapshot: Promise<void>;
+    do {
+      snapshot = this.commands;
+      await snapshot;
+      if (this.disposed) return;
+      const errors = Object.values(this.commandErrors);
+      if (errors.length) throw errors[0];
+      await this.character.prepare();
+    } while (snapshot !== this.commands);
   }
   public setBlinkParameters(config: BlinkParam) {
     const next = { ...config };
