@@ -14,6 +14,8 @@ import { logger } from '@/Core/util/logger';
 import { setEbg } from '@/Core/gameScripts/changeBg/setEbg';
 import { applyTransformToPixiContainer } from '@/Core/controller/stage/pixi/stageEffectTransform';
 import { isGltfCharacterUrl } from './gltfCharacter';
+import { resolveFigureConfig } from './fixedGltfResources';
+import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 
 interface ISyncFigureSlotPayload {
   key: string;
@@ -113,6 +115,8 @@ function syncBg(stageState: IStageState, skipAnimation: boolean) {
 }
 
 function syncFigures(stageState: IStageState, skipAnimation: boolean) {
+  const activeKeys = new Set([...FIGURE_POSITIONS.map(position => `fig-${position}`), ...stageState.freeFigure.map(fig => fig.key)]);
+  for (const key of pendingFigures.keys()) if (!activeKeys.has(key)) pendingFigures.delete(key);
   const getBounds = (key: string) => stageState.live2dMotion.find((motion) => motion.target === key)?.overrideBounds;
 
   for (const position of FIGURE_POSITIONS) {
@@ -149,6 +153,7 @@ function syncFigures(stageState: IStageState, skipAnimation: boolean) {
   }
 }
 
+const pendingFigures = new Map<string, { identity: string; token: object }>();
 function syncFigureSlot(payload: ISyncFigureSlotPayload) {
   const { key, sourceUrl, position, skipAnimation } = payload;
   const pixiStage = WebGAL.gameplay.pixiStage;
@@ -160,10 +165,33 @@ function syncFigureSlot(payload: ISyncFigureSlotPayload) {
   if (sourceUrl) {
     const identity = getFigureIdentity(payload);
     if (currentFigure?.figureIdentity === identity) return;
+    if (pendingFigures.get(key)?.identity === identity) return;
+    pendingFigures.delete(key);
     if (currentFigure) {
       removeFig(currentFigure, softInAniKey, skipAnimation);
     }
     // 入场动画由 changeFigure 作为演出产出，这里只负责创建舞台对象
+    if (isGltfCharacterUrl(sourceUrl)) {
+      const token = {};
+      pendingFigures.set(key, { identity, token });
+      void resolveFigureConfig(sourceUrl).then(resolved => {
+        if (pendingFigures.get(key)?.token !== token || WebGAL.gameplay.pixiStage !== pixiStage) return;
+        pendingFigures.delete(key);
+        if (resolved.gltf) pixiStage.addGltfFigure(key, resolved.url, position);
+        else addFigure(key, resolved.url, position, false);
+        const created = pixiStage.getStageObjByKey(key);
+        if (created) created.figureIdentity = identity;
+        const state = stageStateManager.getViewStageState();
+        syncLive2d(state);
+        syncFigureMetaData(state);
+        applyStageEffects(state.effects);
+      }).catch(error => {
+        if (pendingFigures.get(key)?.token !== token) return;
+        pendingFigures.delete(key);
+        logger.error('立绘配置加载失败', error);
+      });
+      return;
+    }
     addFigure(key, sourceUrl, position);
     // 舞台对象是同步入表的，这里记下它是按哪份身份创建的，供下次同步比对
     const newFigure = pixiStage.getStageObjByKey(key);
@@ -174,6 +202,7 @@ function syncFigureSlot(payload: ISyncFigureSlotPayload) {
     return;
   }
 
+  pendingFigures.delete(key);
   if (currentFigure) {
     removeFig(currentFigure, softInAniKey, skipAnimation);
   }
@@ -275,13 +304,13 @@ function addBg(key: string, url: string) {
   }
 }
 
-function addFigure(key: string, url: string, position: IFigurePosition) {
+function addFigure(key: string, url: string, position: IFigurePosition, detectGltf = true) {
   const pixiStage = WebGAL.gameplay.pixiStage;
   if (!pixiStage) return;
   const baseUrl = window.location.origin;
   const urlObject = new URL(url, baseUrl);
   const figureType = urlObject.searchParams.get('type') as 'image' | 'live2D' | 'spine' | 'video' | null;
-  if (isGltfCharacterUrl(url)) {
+  if (detectGltf && isGltfCharacterUrl(url)) {
     pixiStage.addGltfFigure(key, url, position);
   } else if (url.endsWith('.json')) {
     pixiStage.addLive2dFigure(key, url, position);

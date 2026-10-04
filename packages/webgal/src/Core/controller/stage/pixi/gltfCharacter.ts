@@ -1,6 +1,7 @@
 import type { OffscreenCharacter } from 'webgal-lovelive-gltf-renderer';
 import type { BlinkParam } from '@/Core/live2DCore';
 import type { GltfPreloadRequest } from '@/Core/util/prefetcher/gltfPrefetchPlan';
+import { fixedGltfResources, resolveFigureConfig } from './fixedGltfResources';
 
 export interface GltfInitialState { motion?: string; expression?: string }
 const pendingClaims = new Set<Promise<void>>();
@@ -14,9 +15,13 @@ export function isGltfCharacterUrl(url: string): boolean {
 async function characterOptions(url: string, width: number, height: number) {
   const globals = globalThis as typeof globalThis & { live2dPromise?: Promise<unknown> };
   if (globals.live2dPromise) await globals.live2dPromise;
+  const resolved = await resolveFigureConfig(url);
+  if (!resolved.gltf) throw Error(`${resolved.url}: not a glTF model`);
+  const resourceCatalog = await fixedGltfResources().load();
   return {
-    modelUrl: new URL(url, document.baseURI).href,
-    indexUrl: new URL('./game/gltf-resources.json', document.baseURI).href,
+    modelUrl: resolved.url,
+    indexUrl: resourceCatalog.indexUrl,
+    resourceCatalog,
     runtime: globalThis,
     meshClothEnabled: false,
     motion: '',
@@ -44,16 +49,22 @@ export async function preloadGltfCharacter(url: string, width: number, height: n
 export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
   if (!requests.length) return;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  await OffscreenCharacter.preloadNamed(new URL('./game/gltf-resources.json', document.baseURI).href, requests);
+  const resourceCatalog = await fixedGltfResources().load();
+  await OffscreenCharacter.preloadNamed(resourceCatalog.indexUrl, requests, resourceCatalog);
 }
 
 export async function setGltfPreloadRequests(requests: GltfPreloadRequest[], width: number, height: number) {
   const generation = ++preloadGeneration;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  const options = await Promise.all(requests.map(async request => ({
+  const candidates = await Promise.all(requests.map(async request => {
+    const resolved = await resolveFigureConfig(request.url);
+    if (!resolved.gltf) return null;
+    return {
     ...await characterOptions(request.url, width, height), motion: request.motion,
     expression: request.expression, preloadId: request.preloadId,
-  })));
+    };
+  }));
+  const options = candidates.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
   // Stage creation claims the previous plan before a commit replaces it. A claim
   // waits only for options/import, never for model preparation to complete.
   while (pendingClaims.size) await Promise.all([...pendingClaims]);
