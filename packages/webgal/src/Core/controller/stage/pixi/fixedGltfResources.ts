@@ -19,7 +19,6 @@ export class FixedGltfResources {
   private bytes = new Map<string, ArrayBuffer>();
   private cachedBytes = 0;
   private loaded?: Promise<this>;
-  private parameterConfigs = new Map<string, Promise<Component | null>>();
 
   constructor(base: string, private readonly request: typeof fetch = fetch) {
     this.root = new URL('./game/3d/', base).href;
@@ -98,29 +97,6 @@ export class FixedGltfResources {
     return { type: 'model', name: models[0].name, component: models[0], config, basePath: new URL('.', config).href };
   }
 
-  private async sourceSettings(url: string, type: string) {
-    // Package settings may live above nested parameter files.
-    let directory = new URL('.', url).href;
-    const root = new URL('mtn_exp/', this.root).href;
-    while (directory.startsWith(root)) {
-      const config = new URL('config.json', directory).href;
-      if (!this.parameterConfigs.has(config)) {
-        const pending = this.fetch(config).catch(error => {
-          if (error instanceof ResourceHttpError && error.status === 404) return null;
-          this.parameterConfigs.delete(config); throw error;
-        });
-        this.parameterConfigs.set(config, pending);
-      }
-      const manifest = await this.parameterConfigs.get(config);
-      const component = manifest?.components?.find((c: Component) => c.type === type
-        && typeof c.src === 'string' && new URL(c.src, config).href === url);
-      if (component) return { fade_in: component.fade_in, fade_out: component.fade_out };
-      if (directory === root) break;
-      directory = new URL('../', directory).href;
-    }
-    return {};
-  }
-
   async resolveMotion(name: string, { optional = false } = {}): Promise<FixedResourceEntry | null> {
     const binary = name.endsWith('.motionbin');
     let url = new URL(binary ? `motion/${name}` : `mtn_exp/${name}.mtn`, this.root).href;
@@ -149,7 +125,7 @@ export class FixedGltfResources {
       if (metadata.name !== undefined) component.name = metadata.name;
       if (metadata.description !== undefined) component.description = metadata.description;
       if (metadata.motionGroup !== undefined) component.motionGroup = metadata.motionGroup;
-    } else Object.assign(component, await this.sourceSettings(url, type));
+    } else Object.assign(component, { fade_in: 500, fade_out: 500 });
     return { type, name, config: url, component, motionGroup: component.motionGroup, basePath: new URL('.', url).href };
   }
 
@@ -157,8 +133,7 @@ export class FixedGltfResources {
     const url = new URL(`mtn_exp/${name}.exp.json`, this.root).href;
     try { await this.buffer(url); }
     catch (error) { if (optional && error instanceof ResourceHttpError && error.status === 404) return null; throw error; }
-    const component = { type: 'garupa-expression', name, src: new URL(url).pathname.split('/').pop(),
-      ...await this.sourceSettings(url, 'garupa-expression') };
+    const component = { type: 'garupa-expression', name, src: new URL(url).pathname.split('/').pop() };
     return { type: component.type, name, config: url, component, basePath: new URL('.', url).href };
   }
 

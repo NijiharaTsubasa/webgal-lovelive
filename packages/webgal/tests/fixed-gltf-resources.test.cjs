@@ -64,16 +64,24 @@ test('explicit motionbin skips parameter probes; extensionless tries mtn then bi
   assert.ok(calls.includes(url('mtn_exp/nested/pose.mtn')));
   assert.equal(calls.filter(p=>p.endsWith('pose.motionbin')).length,1);
 });
-test('mtn wins when both exist; fade settings match src rather than old names',async()=>{
+test('mtn wins when both exist and uses default fades without config requests',async()=>{
   const {catalog,calls}=fixture(new Map([
     [url('mtn_exp/anon/bye01.mtn'),'parameter text'],
     [url('motion/anon/bye01.motionbin'),'binary'],
     [url('mtn_exp/config.json'),{components:[{type:'garupa-motion',name:'old-name',src:'anon/bye01.mtn',fade_in:0.25,fade_out:0.75}]}],
   ]));
   const motion=await catalog.resolveMotion('anon/bye01');
-  assert.equal(motion.type,'garupa-motion');assert.equal(motion.component.fade_in,0.25);
+  assert.equal(motion.type,'garupa-motion');assert.equal(motion.component.fade_in,500);
+  assert.equal(motion.component.fade_out,500);
   assert.equal(motion.name,'anon/bye01');
   assert.ok(!calls.includes(url('motion/anon/bye01.motionbin')));
+  assert.ok(!calls.some(value=>value.endsWith('/config.json')));
+});
+test('parameter expressions load directly without overriding file fades',async()=>{
+  const {catalog,calls}=fixture(new Map([[url('mtn_exp/anon/sad.exp.json'),{params:[],fade_in:120}]]));
+  const expression=await catalog.resolveExpression('anon/sad');
+  assert.equal(expression.component.fade_in,undefined);
+  assert.deepEqual(calls,[url('mtn_exp/anon/sad.exp.json')]);
 });
 test('non-404 failures never fallback, optional only suppresses absent resources',async()=>{
   const {catalog,calls}=fixture(new Map([[url('mtn_exp/broken.mtn'),new Response('',{status:503})]]));
