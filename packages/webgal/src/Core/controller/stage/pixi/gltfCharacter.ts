@@ -18,6 +18,7 @@ async function characterOptions(url: string, width: number, height: number) {
     modelUrl: new URL(url, document.baseURI).href,
     indexUrl: new URL('./game/gltf-resources.json', document.baseURI).href,
     runtime: globalThis,
+    meshClothEnabled: false,
     motion: '',
     expression: '',
     // A full-stage transparent canvas makes the existing left/right figure
