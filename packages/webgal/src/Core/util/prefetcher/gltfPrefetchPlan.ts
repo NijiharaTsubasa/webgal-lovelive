@@ -33,6 +33,12 @@ interface ChoicePreview {
   remaining: number;
 }
 
+interface ScenePreview {
+  target: string;
+  figures: Map<string, Figure>;
+  remaining: number;
+}
+
 // Match ChooseOption.parse without importing its UI or evaluating either condition.
 function choicePreview(sentence: ISentence, figures: Map<string, Figure>, line: number, remaining: number): ChoicePreview | undefined {
   const options = sentence.content.split(/(?<!\\)\|/);
@@ -78,11 +84,12 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
   const named = new Map<string, { kind: 'motion' | 'expression'; name: string }>();
   const sentences: ISentence[] = [];
   let choice: ChoicePreview | undefined;
+  let transition: ScenePreview | undefined;
   // The executor advances the cursor before commit, while the choice still blocks.
   const activeChoice = allowChoice && state.PerformList?.find(item => item.id === 'choose')?.script;
   if (activeChoice) {
     choice = choicePreview(activeChoice, figures, start, limit);
-    return { requests, named: [...named.values()], sentences, choice };
+    return { requests, named: [...named.values()], sentences, choice, transition };
   }
   const collectCommittedFigures = () => {
     // A -next batch has one visible state; intermediate replacements need no instances.
@@ -115,6 +122,13 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
       if (allowChoice) choice = choicePreview(sentence, figures, i + 1, limit - meaningful);
       break;
     }
+    if (sentence.command === commandType.changeScene) {
+      collectCommittedFigures();
+      if (allowChoice && sentence.content && !unresolved(sentence.content)) {
+        transition = { target: sentence.content, figures: new Map(figures), remaining: limit - meaningful };
+      }
+      break;
+    }
     if (boundaries.has(sentence.command)) break;
     sentences.push(sentence);
     if (sentence.command === commandType.changeFigure) {
@@ -141,10 +155,19 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
     collectCommittedFigures();
     if (firstBatchOnly && requests.length) break;
   }
-  return { requests, named: [...named.values()], sentences, choice };
+  return { requests, named: [...named.values()], sentences, choice, transition };
 }
 
 export type GltfPreloadPlan = ReturnType<typeof planGltfPreloads>;
+
+/** A deterministic scene edge prepares only the next committed appearance batch. */
+export function planGltfSceneTransition(plan: GltfPreloadPlan, targetScene: IScene,
+  state: IStageState, targetVisit: string): GltfPreloadPlan | undefined {
+  const transition = plan.transition;
+  if (!transition || transition.remaining <= 0) return;
+  return planGltfPreloads(targetScene, 0, state, targetVisit, transition.remaining,
+    transition.figures, false, true);
+}
 
 /** Resolve one choice edge only. Each branch starts from its own projected figure state. */
 export function planGltfChoiceBranch(plan: GltfPreloadPlan, branchIndex: number, targetScene: IScene,
@@ -171,7 +194,7 @@ export function mergeGltfBranchPlans(base: GltfPreloadPlan, branches: (GltfPrelo
   const plans = branches.filter((plan): plan is GltfPreloadPlan => !!plan);
   const requests = [...base.requests];
   // Prioritize known appearances; after they commit the next plan can warm either branch.
-  if (!base.requests.length || base.choice?.branches.length === 1) {
+  if (!base.requests.length || base.choice?.branches.length === 1 || base.transition) {
     for (let i = 0; plans.some(plan => i < plan.requests.length); i++) {
       for (const plan of plans) if (plan.requests[i]) requests.push(plan.requests[i]);
     }

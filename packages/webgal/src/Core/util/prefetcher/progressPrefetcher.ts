@@ -4,7 +4,7 @@ import { WebGAL } from '@/Core/WebGAL';
 import { setGltfPreloadRequests, preloadGltfNamedResources } from '@/Core/controller/stage/pixi/gltfCharacter';
 import { logger } from '@/Core/util/logger';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
-import { planGltfPreloads, planGltfChoiceBranch, mergeGltfBranchPlans, type GltfPreloadPlan } from './gltfPrefetchPlan';
+import { planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans, type GltfPreloadPlan } from './gltfPrefetchPlan';
 import { scenePrefetcher } from './scenePrefetcher';
 
 let previousScene: IScene | undefined;
@@ -38,17 +38,26 @@ export const prefetchSceneByProgress = (scene: IScene, currentSentenceId: number
   const currentVisit = `${visit}:${scene.sceneUrl}`;
   const plan = planGltfPreloads(scene, Math.max(0, currentSentenceId), state, currentVisit);
   const branches = plan.choice?.branches ?? [];
+  const transition = plan.transition;
+  const targetVisit = transition ? `${visit + 1}:${transition.target}` : '';
+  let transitionPlan = transition && parsedChoiceScenes.has(transition.target)
+    ? planGltfSceneTransition(plan, parsedChoiceScenes.get(transition.target)!, state, targetVisit) : undefined;
   const branchPlans = branches.map((branch, index) => branch.scene
     ? (parsedChoiceScenes.has(branch.target)
       ? planGltfChoiceBranch(plan, index, parsedChoiceScenes.get(branch.target)!, state, currentVisit) : undefined)
     : planGltfChoiceBranch(plan, index, scene, state, currentVisit));
-  applyPlan(mergeGltfBranchPlans(plan, branchPlans));
+  const publish = () => applyPlan(mergeGltfBranchPlans(plan, [...branchPlans, transitionPlan]));
+  publish();
   // Keep only the currently reachable scene texts; pending fetches cannot publish stale plans.
   const targets = new Set(branches.filter(branch => branch.scene).map(branch => branch.target));
+  if (transition) targets.add(transition.target);
   for (const url of choiceScenes.keys()) if (!targets.has(url)) choiceScenes.delete(url);
   for (const url of parsedChoiceScenes.keys()) if (!targets.has(url)) parsedChoiceScenes.delete(url);
-  branches.forEach((branch, index) => {
-    if (!branch.scene || branchPlans[index]) return;
+  const edges = [...branches];
+  if (transition) edges.push({ target: transition.target, scene: true });
+  edges.forEach((branch, index) => {
+    if (index === branches.length ? transitionPlan : branchPlans[index]) return;
+    if (!branch.scene) return;
     void (async () => {
       try {
         // Lazy imports keep the parser/engine initialization graph acyclic.
@@ -72,10 +81,11 @@ export const prefetchSceneByProgress = (scene: IScene, currentSentenceId: number
           targetScene = sceneParser(raw, branch.target, branch.target);
           parsedChoiceScenes.set(branch.target, targetScene);
         }
-        branchPlans[index] = planGltfChoiceBranch(plan, index, targetScene, state, currentVisit);
-        applyPlan(mergeGltfBranchPlans(plan, branchPlans));
+        if (index === branches.length) transitionPlan = planGltfSceneTransition(plan, targetScene, state, targetVisit);
+        else branchPlans[index] = planGltfChoiceBranch(plan, index, targetScene, state, currentVisit);
+        publish();
       } catch (error) {
-        if (generation === currentGeneration) logger.warn('glTF 选择分支预加载失败', error);
+        if (generation === currentGeneration) logger.warn('glTF 场景预测预加载失败', error);
       }
     })();
   });
