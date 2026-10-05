@@ -100,10 +100,10 @@ export default function CharacterLoading() {
     >
       <div
         ref={indicatorRef}
-        className={applyStyle(
+        className={`${applyStyle(
           status.kind === 'scene' ? 'CharacterLoading_sceneIndicator' : 'CharacterLoading_stageIndicator',
           styles.indicator,
-        )}
+        )}${status.phase === 'error' ? ` ${styles.errorIndicator}` : ''}`}
         role="status"
         aria-live="polite"
         aria-label={t('preparing')}

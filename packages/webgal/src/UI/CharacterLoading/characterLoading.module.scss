@@ -31,10 +31,18 @@
   background-size: contain;
 }
 
+.overlay .errorIndicator {
+  top: auto;
+  bottom: 16px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+}
+
 .error {
   color: #ff3b72;
   font-size: 140%;
   text-shadow: 0 0 4px white;
+  white-space: nowrap;
 }
 
 .retry {
