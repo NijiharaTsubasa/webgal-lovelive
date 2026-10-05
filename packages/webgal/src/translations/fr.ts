@@ -5,6 +5,12 @@ const fr = {
     no: 'Annuler',
   },
 
+  characterLoading: {
+    preparing: 'Préparation des personnages',
+    failed: 'Échec du chargement des personnages',
+    retry: 'Réessayer',
+  },
+
   menu: {
     options: {
       title: 'OPTIONS',
@@ -12,6 +18,17 @@ const fr = {
         system: {
           title: 'Système',
           options: {
+            characterLoading: {
+              title: 'Chargement des personnages',
+              options: {
+                scene: 'Précharger la scène (équilibré)',
+                onDemand: 'À la demande',
+              },
+              description: {
+                scene: 'Adapté à la capture vidéo et au jeu normal. Les personnages sont préparés avant la scène. Limitez les modèles 3D différents dans une scène pour réduire la mémoire vidéo utilisée.',
+                onDemand: 'Utilise moins de ressources GPU. Adapté aux scènes avec de nombreux personnages mais peu utilisés à la fois, ou aux grands groupes occasionnels. Les prochains personnages sont préparés en arrière-plan pendant la lecture. Le chargement apparaît seulement si la préparation est inachevée au changement ; de nombreux nouveaux modèles peuvent augmenter l’attente.',
+              },
+            },
             autoSpeed: {
               title: 'Vitesse de lecture automatique',
               options: {

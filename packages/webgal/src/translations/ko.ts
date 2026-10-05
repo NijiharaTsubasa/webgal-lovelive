@@ -5,6 +5,12 @@ const ko = {
     no: '아니요',
   },
 
+  characterLoading: {
+    preparing: '캐릭터 준비 중',
+    failed: '캐릭터 로딩 실패',
+    retry: '다시 시도',
+  },
+
   menu: {
     options: {
       title: '설정',
@@ -12,6 +18,17 @@ const ko = {
         system: {
           title: '시스템',
           options: {
+            characterLoading: {
+              title: '캐릭터 로딩',
+              options: {
+                scene: '장면 미리 로딩 (균형)',
+                onDemand: '필요할 때 로딩',
+              },
+              description: {
+                scene: '영상 녹화와 일반 플레이에 적합합니다. 장면에 들어가기 전에 캐릭터를 준비합니다. 비디오 메모리를 과도하게 사용하지 않도록 한 장면에 너무 많은 종류의 3D 모델을 넣지 마세요.',
+                onDemand: 'GPU 자원을 더 절약합니다. 캐릭터 종류는 많지만 잠깐 사용하는 수는 적거나, 일시적으로 많은 캐릭터를 표시할 때 적합합니다. 재생 중 다음 캐릭터를 백그라운드에서 준비하며, 전환할 때 준비가 끝나지 않은 경우에만 로딩 화면을 표시합니다. 새 모델을 자주 바꾸면 대기가 늘어날 수 있습니다.',
+              },
+            },
             autoSpeed: {
               title: '자동진행 속도',
               options: {

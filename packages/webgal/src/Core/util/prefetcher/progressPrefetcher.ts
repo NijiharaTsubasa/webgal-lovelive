@@ -2,9 +2,10 @@ import { commandType, IScene } from '@/Core/controller/scene/sceneInterface';
 import { assetsPrefetcher } from '@/Core/util/prefetcher/assetsPrefetcher';
 import { WebGAL } from '@/Core/WebGAL';
 import { setGltfPreloadRequests, preloadGltfNamedResources } from '@/Core/controller/stage/pixi/gltfCharacter';
+import { prewarmGltfPredictions } from '@/Core/controller/stage/pixi/gltfSceneResidency';
 import { logger } from '@/Core/util/logger';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
-import { planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans, type GltfPreloadPlan } from './gltfPrefetchPlan';
+import { planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans, planGltfBackgroundBatches, type GltfPreloadPlan } from './gltfPrefetchPlan';
 import { scenePrefetcher } from './scenePrefetcher';
 
 let previousScene: IScene | undefined;
@@ -46,7 +47,11 @@ export const prefetchSceneByProgress = (scene: IScene, currentSentenceId: number
     ? (parsedChoiceScenes.has(branch.target)
       ? planGltfChoiceBranch(plan, index, parsedChoiceScenes.get(branch.target)!, state, currentVisit) : undefined)
     : planGltfChoiceBranch(plan, index, scene, state, currentVisit));
-  const publish = () => applyPlan(mergeGltfBranchPlans(plan, [...branchPlans, transitionPlan]));
+  const publish = () => {
+    applyPlan(mergeGltfBranchPlans(plan, [...branchPlans, transitionPlan]));
+    void prewarmGltfPredictions(planGltfBackgroundBatches(plan, [...branchPlans, transitionPlan]))
+      .catch(error => logger.warn('glTF 后台实例预热失败', error));
+  };
   publish();
   // Keep only the currently reachable scene texts; pending fetches cannot publish stale plans.
   const targets = new Set(branches.filter(branch => branch.scene).map(branch => branch.target));

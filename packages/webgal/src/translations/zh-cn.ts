@@ -5,6 +5,12 @@ const zhCn = {
     no: '否',
   },
 
+  characterLoading: {
+    preparing: '正在准备角色',
+    failed: '角色加载失败',
+    retry: '重试',
+  },
+
   menu: {
     options: {
       title: '选项',
@@ -12,6 +18,17 @@ const zhCn = {
         system: {
           title: '系统',
           options: {
+            characterLoading: {
+              title: '角色加载',
+              options: {
+                scene: '场景预加载（均衡）',
+                onDemand: '按需加载',
+              },
+              description: {
+                scene: '适合录制视频和正常游玩。进入场景前准备角色；同一场景不宜包含过多不同的 3D 模型，以免占用过多显存。',
+                onDemand: '更节省 GPU 资源，适合同一场景角色种类多、短时间只使用少量角色，或临时多人同屏。播放期间后台准备近期角色；切换时尚未准备好才显示加载界面。频繁切换新模型可能增加等待。',
+              },
+            },
             autoSpeed: {
               title: '自动播放速度',
               options: {

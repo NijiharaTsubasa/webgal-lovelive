@@ -5,6 +5,12 @@ const en = {
     no: 'Cancel',
   },
 
+  characterLoading: {
+    preparing: 'Preparing characters',
+    failed: 'Character loading failed',
+    retry: 'Retry',
+  },
+
   menu: {
     options: {
       title: 'OPTIONS',
@@ -12,6 +18,17 @@ const en = {
         system: {
           title: 'System',
           options: {
+            characterLoading: {
+              title: 'Character loading',
+              options: {
+                scene: 'Preload scene (balanced)',
+                onDemand: 'On demand',
+              },
+              description: {
+                scene: 'Suitable for video recording and regular play. Characters are prepared before entering the scene. Avoid too many different 3D models in one scene to limit video memory use.',
+                onDemand: 'Uses fewer GPU resources. Suitable for scenes with many character types but few in use at a time, or occasional large groups. Upcoming characters are prepared in the background during playback. Loading appears only when they are not ready at the transition; frequent new models may increase waiting.',
+              },
+            },
             autoSpeed: {
               title: 'Autoplay Speed',
               options: {

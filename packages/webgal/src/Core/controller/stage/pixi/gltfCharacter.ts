@@ -5,14 +5,13 @@ import { fixedGltfResources, resolveFigureConfig } from './fixedGltfResources';
 
 export interface GltfInitialState { motion?: string; expression?: string }
 const pendingClaims = new Set<Promise<void>>();
-let preloadGeneration = 0;
 
 /** Package entry points are config.json; ordinary Live2D model.json is unaffected. */
 export function isGltfCharacterUrl(url: string): boolean {
   return new URL(url, document.baseURI).pathname.endsWith('/config.json');
 }
 
-async function characterOptions(url: string, width: number, height: number) {
+export async function characterOptions(url: string, width: number, height: number) {
   const globals = globalThis as typeof globalThis & { live2dPromise?: Promise<unknown> };
   if (globals.live2dPromise) await globals.live2dPromise;
   const resolved = await resolveFigureConfig(url);
@@ -54,22 +53,14 @@ export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion'
 }
 
 export async function setGltfPreloadRequests(requests: GltfPreloadRequest[], width: number, height: number) {
-  const generation = ++preloadGeneration;
-  const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  const candidates = await Promise.all(requests.map(async request => {
-    const resolved = await resolveFigureConfig(request.url);
-    if (!resolved.gltf) return null;
-    return {
-    ...await characterOptions(request.url, width, height), motion: request.motion,
-    expression: request.expression, preloadId: request.preloadId,
-    };
-  }));
-  const options = candidates.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-  // Stage creation claims the previous plan before a commit replaces it. A claim
-  // waits only for options/import, never for model preparation to complete.
-  while (pendingClaims.size) await Promise.all([...pendingClaims]);
-  if (generation !== preloadGeneration) return;
-  await OffscreenCharacter.setPreloadRequests(options);
+  // Named inputs share the fetch cache; GPU preparation belongs to the residency owner.
+  const resolved = await Promise.all(requests.map(async request =>
+    (await resolveFigureConfig(request.url)).gltf ? request : null));
+  await preloadGltfNamedResources(resolved.filter((item): item is GltfPreloadRequest => !!item).flatMap(request => [
+    ...(request.motion ? [{ kind: 'motion' as const, name: request.motion }] : []),
+    ...(request.expression ? [{ kind: 'expression' as const, name: request.expression }] : []),
+  ]));
+
 }
 
 export async function createGltfCharacter(url: string, width: number, height: number, initial: GltfInitialState = {}) {
@@ -100,13 +91,18 @@ export class GltfCharacterRuntime {
   private blink: BlinkParam | undefined;
   private commandErrors: Partial<Record<'motion' | 'expression', unknown>> = {};
   private commandGenerations = { motion: 0, expression: 0 };
-  public constructor(private readonly character: OffscreenCharacter, initial: GltfInitialState = {}) {
+  private active = true;
+  public constructor(private readonly character: OffscreenCharacter, initial: GltfInitialState = {},
+    private readonly release?: () => void) {
     this.motion = initial.motion;
     this.expression = initial.expression;
   }
   public get canvas(): HTMLCanvasElement {
     return this.character.canvas;
   }
+  public get isActive() { return this.active && !this.disposed; }
+  public activate() { this.disposed = false; this.active = true; }
+  public suspend() { this.active = false; }
   private enqueue(kind: 'motion' | 'expression', command: () => Promise<void>) {
     const generation = ++this.commandGenerations[kind];
     delete this.commandErrors[kind];
@@ -152,11 +148,13 @@ export class GltfCharacterRuntime {
     if (!this.disposed) this.character.setMouth(value);
   }
   public update(delta: number) {
-    if (!this.disposed) this.character.update(delta);
+    if (this.isActive) this.character.update(delta);
   }
   public dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.character.dispose();
+    this.active = false;
+    if (this.release) this.release();
+    else this.character.dispose();
   }
 }

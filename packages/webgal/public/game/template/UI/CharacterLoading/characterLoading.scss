@@ -1,0 +1,33 @@
+.CharacterLoading_sceneIndicator {
+  position: absolute;
+  left: var(--character-loading-anchor-x, calc(100% - 65px));
+  top: calc(var(--character-loading-anchor-y, calc(100% - 61px)) + 8px);
+  transform: translateX(-100%);
+  text-align: right;
+}
+
+.CharacterLoading_sceneImage {
+  width: 274px;
+  height: 33px;
+  background-image: url('game/template/assets/now-loading.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.CharacterLoading_stageIndicator {
+  position: absolute;
+  left: var(--character-loading-anchor-x, calc(100% - 65px));
+  top: calc(var(--character-loading-anchor-y, calc(100% - 61px)) + 8px);
+  transform: translateX(-100%);
+  text-align: right;
+}
+
+.CharacterLoading_stageImage {
+  width: 274px;
+  height: 33px;
+  background-image: url('game/template/assets/now-loading.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}

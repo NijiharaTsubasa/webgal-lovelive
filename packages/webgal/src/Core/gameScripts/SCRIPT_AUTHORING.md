@@ -26,7 +26,7 @@ export function someCommand(sentence: ISentence): IPerform {
 2. `forward()` 清理未提交的临时 perform，开始收集本轮 perform。
 3. `scriptExecutor()` 执行当前句；如果有 `-next`，会在同一轮 `forward()` 内继续执行后续句。
 4. 命令函数只修改 `calculationStageState`，并把返回的 perform 放进 pending 列表。
-5. `commitForward()` 调用 `stageStateManager.commit({ applyPixiEffects: false })`，把演算态提交成 `viewStageState`。
+5. `await commitForward()` 等待本轮整组角色准备完成，再调用 `stageStateManager.commit({ applyPixiEffects: false })`，把演算态提交成 `viewStageState`。等待期间保持已提交画面，并暂停新的推进；准备失败时保留本轮演算结果供重试。
 6. stage commit handler 同步 Pixi/React/audio 等视图对象。
 7. `performController.commitPendingPerforms()` 启动 pending perform 的 `startFunction`。
 8. `stageStateManager.applyCommittedPixiEffects()` 把提交后的 `effects` 应用到未被动画锁定的 Pixi 对象。

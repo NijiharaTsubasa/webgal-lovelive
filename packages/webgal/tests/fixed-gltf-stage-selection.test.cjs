@@ -22,6 +22,7 @@ function setup(){
     '@/Core/util/logger':{logger:{debug(){},error(){}}},
     '@/Core/Modules/stage/stageStateManager':{stageStateManager:{getViewStageState:()=>state}},
     './gltfCharacter':{isGltfCharacterUrl:url=>url.endsWith('/config.json')},
+    './gltfSceneResidency':{hasPreparedGltfCharacter:()=>false},
     './fixedGltfResources':{resolveFigureConfig:url=>new Promise(resolve=>requests.push({url,resolve}))},
   }[name]??{});
   loaded._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021}}).outputText,filename);

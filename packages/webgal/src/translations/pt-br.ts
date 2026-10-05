@@ -5,6 +5,12 @@ const ptBr = {
     no: 'Cancelar',
   },
 
+  characterLoading: {
+    preparing: 'Preparando personagens',
+    failed: 'Falha ao carregar personagens',
+    retry: 'Tentar novamente',
+  },
+
   menu: {
     options: {
       title: 'OPÇÕES',
@@ -12,6 +18,17 @@ const ptBr = {
         system: {
           title: 'Sistema',
           options: {
+            characterLoading: {
+              title: 'Carregamento de personagens',
+              options: {
+                scene: 'Pré-carregar cena (equilibrado)',
+                onDemand: 'Sob demanda',
+              },
+              description: {
+                scene: 'Adequado para gravação de vídeo e jogo normal. Os personagens são preparados antes da cena. Evite muitos modelos 3D diferentes na mesma cena para limitar o uso de memória de vídeo.',
+                onDemand: 'Usa menos recursos da GPU. Adequado para cenas com muitos tipos de personagens, mas poucos em uso por vez, ou grupos grandes ocasionais. Os próximos personagens são preparados em segundo plano durante a reprodução. A tela de carregamento aparece apenas se ainda não estiverem prontos na transição; novos modelos frequentes podem aumentar a espera.',
+              },
+            },
             autoSpeed: {
               title: 'Velocidade da reprodução automática',
               options: {

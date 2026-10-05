@@ -1,5 +1,6 @@
 import {
   getFigureBaseX,
+  normalizeFigureBounds,
   IFigureAssociatedAnimation,
   IFigureMetadata,
   IFigurePosition,
@@ -21,6 +22,7 @@ import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import { queryStageObjectReferenceBox, type QueryTargetReferenceBoxResult } from './referenceBox';
 import { assignPixiTransform } from './stageEffectTransform';
 import { createGltfCharacter, type GltfCharacterRuntime } from './gltfCharacter';
+import { takePreparedGltfCharacter } from './gltfSceneResidency';
 import { GltfCharacterSprite } from './GltfCharacterSprite';
 
 export interface IAnimationObject {
@@ -597,7 +599,7 @@ export default class PixiStage {
     let runtime: GltfCharacterRuntime | undefined;
     const app = this.currentApp;
     const tick = () => {
-      if (disposed || !runtime || !texture) return;
+      if (disposed || !runtime || !texture || !runtime.isActive) return;
       try {
         runtime.update(((app?.ticker.elapsedMS ?? 0) * (app?.ticker.speed ?? 1)) / 1000);
         texture.baseTexture.update();
@@ -618,11 +620,8 @@ export default class PixiStage {
     // A container may also be destroyed by an owner other than removeStageObjectByKey.
     container.once('destroyed', object.disposeGltf);
     const initialState = stageStateManager.getViewStageState();
-    void createGltfCharacter(url, this.stageWidth, this.stageHeight, {
-      motion: initialState.live2dMotion.find(item => item.target === key)?.motion ?? '',
-      expression: initialState.live2dExpression.find(item => item.target === key)?.expression ?? '',
-    })
-      .then(async (loaded) => {
+    const prepared = takePreparedGltfCharacter(key, url, presetPosition, normalizeFigureBounds(bounds));
+    const attach = async (loaded: GltfCharacterRuntime, alreadyPrepared = false) => {
         if (disposed || !this.getStageObjByUuid(object.uuid)) {
           loaded.dispose();
           return;
@@ -641,9 +640,14 @@ export default class PixiStage {
           const mouth = this.getCurrentMouthValue(object.key);
           loaded.setMouth(mouth === null ? null : mouth < 50 ? 0 : Math.min(1, (mouth - 50) / 50));
         }
-        await loaded.prepare();
-        if (disposed || !this.getStageObjByUuid(object.uuid)) return;
-        texture = PIXI.Texture.from(loaded.canvas);
+        if (!alreadyPrepared) await loaded.prepare();
+        if (disposed || !this.getStageObjByUuid(object.uuid)) {
+          object.disposeGltf?.();
+          return;
+        }
+        // A retiring sprite keeps its uploaded image while this canvas changes owners.
+        // Give each lease its own Pixi texture instead of the canvas-keyed cache.
+        texture = new PIXI.Texture(new PIXI.BaseTexture(loaded.canvas));
         const sprite = new GltfCharacterSprite(texture, bounds);
         this.setContainerInitialPosition({
           container,
@@ -661,13 +665,18 @@ export default class PixiStage {
         app?.ticker.add(tick);
         this.notifyTargetReferenceBoxChanged(object.key);
         this.requestRender();
-      })
-      .catch((error) => {
+      };
+    const failed = (error: unknown) => {
         object.disposeGltf?.();
         // Remove only this failed instance, including if it was renamed for its exit.
         if (this.getStageObjByUuid(object.uuid)) this.removeStageObjectByKey(object.key);
         logger.error('glTF character load failed', error);
-      });
+      };
+    if (prepared) void attach(prepared, true).catch(failed);
+    else void createGltfCharacter(url, this.stageWidth, this.stageHeight, {
+      motion: initialState.live2dMotion.find(item => item.target === key)?.motion ?? '',
+      expression: initialState.live2dExpression.find(item => item.target === key)?.expression ?? '',
+    }).then(loaded => attach(loaded)).catch(failed);
   }
 
   public async addJsonlFigure(key: string, jsonlPath: string, presetPosition: IFigurePosition = 'center') {

@@ -110,6 +110,7 @@ function normalizeUserData(userData: Partial<IUserData>): IUserData {
     optionData: {
       ...defaultUserData.optionData,
       ...optionData,
+      characterLoadingMode: optionData.characterLoadingMode === 'on-demand' ? 'on-demand' : 'scene',
     },
     appreciationData: {
       ...defaultUserData.appreciationData,

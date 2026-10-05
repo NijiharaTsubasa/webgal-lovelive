@@ -73,5 +73,5 @@ export const jumpFromBacklog = (index: number, refetchScene = true) => {
 
     // 重新渲染
     WebGAL.gameplay.pixiStage?.requestRender();
-  }, refetchScene);
+  }, refetchScene, backlogFile.currentStageState);
 };

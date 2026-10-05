@@ -5,6 +5,12 @@ const de = {
     no: 'Nein',
   },
 
+  characterLoading: {
+    preparing: 'Figuren werden vorbereitet',
+    failed: 'Figuren konnten nicht geladen werden',
+    retry: 'Erneut versuchen',
+  },
+
   menu: {
     options: {
       title: 'OPTIONEN',
@@ -12,6 +18,17 @@ const de = {
         system: {
           title: 'System',
           options: {
+            characterLoading: {
+              title: 'Figuren laden',
+              options: {
+                scene: 'Szene vorladen (ausgewogen)',
+                onDemand: 'Bei Bedarf',
+              },
+              description: {
+                scene: 'Für Videoaufnahmen und normales Spielen geeignet. Figuren werden vor Szenenbeginn vorbereitet. Begrenzen Sie unterschiedliche 3D-Modelle pro Szene, um Videospeicher zu sparen.',
+                onDemand: 'Benötigt weniger GPU-Ressourcen. Geeignet bei vielen Figurenarten mit wenigen gleichzeitig genutzten Figuren oder gelegentlich großen Gruppen. Kommende Figuren werden während der Wiedergabe im Hintergrund vorbereitet. Die Ladeanzeige erscheint nur bei noch nicht abgeschlossener Vorbereitung; häufige neue Modelle können die Wartezeit erhöhen.',
+              },
+            },
             autoSpeed: {
               title: 'Auto-Geschwindigkeit',
               options: {

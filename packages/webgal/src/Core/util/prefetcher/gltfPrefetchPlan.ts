@@ -12,7 +12,7 @@ export interface GltfPreloadRequest {
   preloadId: string;
 }
 
-interface Figure {
+export interface ProjectedGltfFigure {
   url: string;
   position: IFigurePosition;
   bounds: [number, number, number, number];
@@ -20,6 +20,8 @@ interface Figure {
   expression: string;
   createdAt: number;
 }
+
+type Figure = ProjectedGltfFigure;
 
 interface ChoiceBranch {
   target: string;
@@ -81,6 +83,7 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
   }
   let committed = new Map(figures);
   const requests: GltfPreloadRequest[] = [];
+  const batches: Array<Array<{ key: string; figure: ProjectedGltfFigure }>> = [];
   const named = new Map<string, { kind: 'motion' | 'expression'; name: string }>();
   const sentences: ISentence[] = [];
   let choice: ChoicePreview | undefined;
@@ -89,9 +92,11 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
   const activeChoice = allowChoice && state.PerformList?.find(item => item.id === 'choose')?.script;
   if (activeChoice) {
     choice = choicePreview(activeChoice, figures, start, limit);
-    return { requests, named: [...named.values()], sentences, choice, transition };
+    return { requests, named: [...named.values()], sentences, choice, transition, batches, projectedFigures: new Map(figures) };
   }
   const collectCommittedFigures = () => {
+    batches.push([...figures].filter(([, figure]) => isGltf(figure.url))
+      .map(([key, figure]) => ({ key, figure: { ...figure } })));
     // A -next batch has one visible state; intermediate replacements need no instances.
     for (const [key, figure] of figures) {
       const old = committed.get(key);
@@ -155,7 +160,7 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
     collectCommittedFigures();
     if (firstBatchOnly && requests.length) break;
   }
-  return { requests, named: [...named.values()], sentences, choice, transition };
+  return { requests, named: [...named.values()], sentences, choice, transition, batches, projectedFigures: new Map(figures) };
 }
 
 export type GltfPreloadPlan = ReturnType<typeof planGltfPreloads>;
@@ -202,4 +207,17 @@ export function mergeGltfBranchPlans(base: GltfPreloadPlan, branches: (GltfPrelo
   const named = new Map(base.named.map(item => [`${item.kind}:${item.name}`, item]));
   for (const plan of plans) for (const item of plan.named) named.set(`${item.kind}:${item.name}`, item);
   return { ...base, requests, named: [...named.values()], sentences: [...base.sentences, ...plans.flatMap(plan => plan.sentences)] };
+}
+
+/** GPU lookahead stops at the first new appearance group, or at two predictable choice branches. */
+export function planGltfBackgroundBatches(base: GltfPreloadPlan, branches: (GltfPreloadPlan | undefined)[]) {
+  const first = (plan: GltfPreloadPlan) => {
+    const appearances = new Set(plan.requests.map(request => JSON.stringify(JSON.parse(request.preloadId).slice(1))));
+    return plan.batches.find(batch => batch.some(({key, figure}) =>
+      appearances.has(JSON.stringify([figure.createdAt, key, identity(figure)]))));
+  };
+  const batch = first(base);
+  if (batch) return [batch];
+  return branches.filter((plan): plan is GltfPreloadPlan => !!plan).slice(0, 2)
+    .map(first).filter((value): value is NonNullable<typeof value> => !!value);
 }

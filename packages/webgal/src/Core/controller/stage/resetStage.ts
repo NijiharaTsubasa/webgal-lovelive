@@ -1,3 +1,5 @@
+import { cancelPendingForward } from '@/Core/controller/gamePlay/nextSentence';
+import { releaseSceneCharacters } from '@/Core/util/sceneCharacterLoading';
 import cloneDeep from 'lodash/cloneDeep';
 import { WebGAL } from '@/Core/WebGAL';
 import { initState, stageStateManager } from '@/Core/Modules/stage/stageStateManager';
@@ -9,6 +11,8 @@ export interface ResetStageOptions {
 
 export const resetStage = (resetBacklog: boolean, resetSceneAndVar = true, options: ResetStageOptions = {}) => {
   const { commitStageState = true } = options;
+  cancelPendingForward();
+  releaseSceneCharacters();
   /**
    * 清空运行时
    */

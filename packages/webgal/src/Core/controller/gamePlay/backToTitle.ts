@@ -1,3 +1,5 @@
+import { cancelPendingForward } from './nextSentence';
+import { WebGAL } from '@/Core/WebGAL';
 import { webgalStore } from '@/store/store';
 import { setVisibility } from '@/store/GUIReducer';
 import { stopAllPerform } from '@/Core/controller/gamePlay/stopAllPerform';
@@ -9,6 +11,9 @@ import { fastSaveGame } from '../storage/fastSaveLoad';
 
 export const backToTitle = () => {
   if (webgalStore.getState().GUI.showTitle) return;
+  cancelPendingForward();
+  WebGAL.sceneManager.sceneWritePromise = null;
+  WebGAL.sceneManager.lockSceneWrite = false;
   fastSaveGame();
   const dispatch = webgalStore.dispatch;
   stopAllPerform();

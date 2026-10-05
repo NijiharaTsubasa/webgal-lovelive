@@ -36,6 +36,7 @@ const initialOptionSet: IOptionData = {
   voiceInterruption: voiceOption.no,
   fullScreen: fullScreenOption.off,
   skipAll: false,
+  characterLoadingMode: 'scene',
   enableBangControlPanel: true,
   screenRotation: 'auto',
 };

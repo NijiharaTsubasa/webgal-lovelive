@@ -4,6 +4,7 @@ import { webgalStore } from '@/store/store';
 import { nextSentence } from '@/Core/controller/gamePlay/nextSentence';
 
 import { WebGAL } from '@/Core/WebGAL';
+import { isCharacterLoadingBusy } from '@/Core/util/sceneCharacterLoading';
 
 /**
  * 设置 autoplay 按钮的激活与否
@@ -56,6 +57,11 @@ export const autoNextSentence = () => {
  * 自动播放的执行函数
  */
 const autoPlay = () => {
+  if (isCharacterLoadingBusy() || WebGAL.sceneManager.lockSceneWrite) {
+    if (WebGAL.gameplay.autoTimeout !== null) clearTimeout(WebGAL.gameplay.autoTimeout);
+    WebGAL.gameplay.autoTimeout = null;
+    return;
+  }
   const data = webgalStore.getState().userData.optionData.autoSpeed;
   // 范围为 [250, 1750]
   const autoPlayDelay = 250 + (100 - data) * 15;

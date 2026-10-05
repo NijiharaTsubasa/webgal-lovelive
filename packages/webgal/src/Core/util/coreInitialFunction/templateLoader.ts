@@ -87,6 +87,7 @@ async function loadStyleFiles() {
     { ui: 'title', path: 'UI/Title/title.scss' },
     { ui: 'textbox', path: 'Stage/TextBox/textbox.scss' },
     { ui: 'choose', path: 'Stage/Choose/choose.scss' },
+    { ui: 'characterLoading', path: 'UI/CharacterLoading/characterLoading.scss' },
   ];
 
   await Promise.all(

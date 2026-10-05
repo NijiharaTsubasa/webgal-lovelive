@@ -5,6 +5,7 @@ import { useValue } from '@/hooks/useValue';
 import { System } from '@/UI/Menu/Options/System/System';
 import { Display } from '@/UI/Menu/Options/Display/Display';
 import { Sound } from '@/UI/Menu/Options/Sound/Sound';
+import { ThreeD } from './ThreeD';
 import useTrans from '@/hooks/useTrans';
 import useSoundEffect from '@/hooks/useSoundEffect';
 import titleIcon from '@/assets/image/title-icon.png';
@@ -13,6 +14,7 @@ enum optionPage {
   'System',
   'Display',
   'Sound',
+  'ThreeD',
 }
 
 export const Options: FC = () => {
@@ -68,11 +70,22 @@ export const Options: FC = () => {
           >
             {t('pages.sound.title')}
           </div>
+          <div
+            onClick={() => {
+              currentOptionPage.set(optionPage.ThreeD);
+              playSeSwitch();
+            }}
+            className={getClassName(optionPage.ThreeD)}
+            onMouseEnter={playSeEnter}
+          >
+            3D
+          </div>
         </div>
         <div className={styles.Options_main_content}>
           {currentOptionPage.value === optionPage.Display && <Display />}
           {currentOptionPage.value === optionPage.System && <System />}
           {currentOptionPage.value === optionPage.Sound && <Sound />}
+          {currentOptionPage.value === optionPage.ThreeD && <ThreeD />}
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { cancelCharacterLoading } from '@/Core/util/sceneCharacterLoading';
 import { ISceneData } from '@/Core/controller/scene/sceneInterface';
 import { IGameVar } from '@/Core/Modules/stage/stageInterface';
 import cloneDeep from 'lodash/cloneDeep';
@@ -40,6 +41,7 @@ export class SceneManager {
   public sceneWritePromise: Promise<void> | null = null;
 
   public resetScene() {
+    cancelCharacterLoading();
     this.sceneData.currentSentenceId = 0;
     this.sceneData.sceneStack = [];
     this.sceneData.currentScene = cloneDeep(initSceneData.currentScene);

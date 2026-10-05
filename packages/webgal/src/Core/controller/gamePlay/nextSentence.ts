@@ -4,6 +4,8 @@ import { webgalStore } from '@/store/store';
 
 import { WebGAL } from '@/Core/WebGAL';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
+import cloneDeep from 'lodash/cloneDeep';
+import { beginCharacterLoading, cancelCharacterLoading, isCharacterLoadingBusy, prepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
 
 /**
  * 执行一次推进前检查。
@@ -18,6 +20,7 @@ import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
  * @returns true 表示可以继续调用 forward/commitForward。
  */
 export const preForward = (continueAfterSettling = false) => {
+  if (isCharacterLoadingBusy()) return false;
   if (WebGAL.sceneManager.lockSceneWrite) {
     logger.warn('next 被场景切换阻塞！');
     return false;
@@ -50,6 +53,7 @@ export interface ForwardOptions {
 }
 
 export const forward = (options: ForwardOptions = {}) => {
+  if (isCharacterLoadingBusy()) return false;
   if (WebGAL.sceneManager.lockSceneWrite) {
     logger.warn('forward 被场景切换阻塞！');
     return false;
@@ -77,11 +81,52 @@ export const forward = (options: ForwardOptions = {}) => {
  * 提交流程分三步：先提交 stage state，再启动 perform，最后应用 Pixi effects。
  * 这个顺序保证 startFunction 看到的是已提交的视图状态。
  */
-export const commitForward = () => {
+const commitPreparedForward = () => {
   stageStateManager.commit({ applyPixiEffects: false });
   WebGAL.gameplay.performController.commitPendingPerforms();
   stageStateManager.applyCommittedPixiEffects();
   WebGAL.flowchartManager.unlockPendingCurrentScene();
+};
+
+interface PendingBatch {
+  stage: ReturnType<typeof stageStateManager.getCalculationStageState>;
+  scene: typeof WebGAL.sceneManager.sceneData.currentScene;
+  cursor: number;
+  attempt?: ReturnType<typeof beginCharacterLoading>;
+}
+let pendingBatch: PendingBatch | undefined;
+export const cancelPendingForward = () => {
+  pendingBatch = undefined;
+  cancelCharacterLoading();
+};
+
+/** Prepare one already evaluated batch; retries never execute its scripts again. */
+export const commitForward = async (): Promise<void> => {
+  const batch = pendingBatch ??= {
+    stage: cloneDeep(stageStateManager.getCalculationStageState()),
+    scene: WebGAL.sceneManager.sceneData.currentScene,
+    cursor: WebGAL.sceneManager.sceneData.currentSentenceId,
+  };
+  if (batch.attempt?.isCurrent()) return;
+  const ticket = beginCharacterLoading('stage');
+  batch.attempt = ticket;
+  try {
+    await prepareStageCharacters(batch.stage, ticket.signal);
+    if (!ticket.isCurrent() || pendingBatch !== batch) return;
+    if (batch.scene !== WebGAL.sceneManager.sceneData.currentScene
+        || batch.cursor !== WebGAL.sceneManager.sceneData.currentSentenceId) {
+      pendingBatch = undefined; ticket.succeed(); return;
+    }
+    stageStateManager.replaceCalculationStageState(batch.stage);
+    pendingBatch = undefined;
+    ticket.succeed();
+    commitPreparedForward();
+  } catch (error) {
+    if (!ticket.isCurrent()) return;
+    batch.attempt = undefined;
+    logger.error('角色准备失败', error);
+    ticket.fail(error, commitForward);
+  }
 };
 
 /**
@@ -91,7 +136,7 @@ export const commitForward = () => {
  * 它不会触发 userInteractNext，因此不会把“内部自动继续”误判为用户点击。
  * 如果当前只剩可提前结束的非 hold 演出，会先结算它们并继续执行下一条语句。
  */
-export const continueSentence = () => {
+export const continueSentence = async () => {
   const GUIState = webgalStore.getState().GUI;
   if (GUIState.showTitle) {
     return;
@@ -101,8 +146,8 @@ export const continueSentence = () => {
     return;
   }
 
-  forward();
-  commitForward();
+  if (pendingBatch) { await commitForward(); return; }
+  if (forward() && !WebGAL.sceneManager.lockSceneWrite) await commitForward();
 };
 
 /**
@@ -112,7 +157,8 @@ export const continueSentence = () => {
  * 它会触发 userInteractNext，让 intro 等演出先响应用户输入。
  * 如果当前存在可提前结束的普通演出，本次用户推进只结束演出，不再继续执行下一条语句。
  */
-export const nextSentence = () => {
+export const nextSentence = async () => {
+  if (isCharacterLoadingBusy()) return;
   WebGAL.events.userInteractNext.emit();
 
   const GUIState = webgalStore.getState().GUI;
@@ -124,6 +170,6 @@ export const nextSentence = () => {
     return;
   }
 
-  forward();
-  commitForward();
+  if (pendingBatch) { await commitForward(); return; }
+  if (forward() && !WebGAL.sceneManager.lockSceneWrite) await commitForward();
 };

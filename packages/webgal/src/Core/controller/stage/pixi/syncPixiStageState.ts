@@ -16,6 +16,7 @@ import { applyTransformToPixiContainer } from '@/Core/controller/stage/pixi/stag
 import { isGltfCharacterUrl } from './gltfCharacter';
 import { resolveFigureConfig } from './fixedGltfResources';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
+import { hasPreparedGltfCharacter } from './gltfSceneResidency';
 
 interface ISyncFigureSlotPayload {
   key: string;
@@ -164,7 +165,8 @@ function syncFigureSlot(payload: ISyncFigureSlotPayload) {
   // 旧存档中可能没有新增位置的字段，这里同时容错 undefined
   if (sourceUrl) {
     const identity = getFigureIdentity(payload);
-    if (currentFigure?.figureIdentity === identity) return;
+    if (currentFigure?.figureIdentity === identity
+      && !hasPreparedGltfCharacter(key, sourceUrl, position, normalizeFigureBounds(payload.bounds))) return;
     if (pendingFigures.get(key)?.identity === identity) return;
     pendingFigures.delete(key);
     if (currentFigure) {
@@ -172,6 +174,12 @@ function syncFigureSlot(payload: ISyncFigureSlotPayload) {
     }
     // 入场动画由 changeFigure 作为演出产出，这里只负责创建舞台对象
     if (isGltfCharacterUrl(sourceUrl)) {
+      if (hasPreparedGltfCharacter(key, sourceUrl, position, normalizeFigureBounds(payload.bounds))) {
+        pixiStage.addGltfFigure(key, sourceUrl, position);
+        const created = pixiStage.getStageObjByKey(key);
+        if (created) created.figureIdentity = identity;
+        return;
+      }
       const token = {};
       pendingFigures.set(key, { identity, token });
       void resolveFigureConfig(sourceUrl).then(resolved => {

@@ -57,5 +57,5 @@ export function loadGameFromStageData(stageData: ISaveData) {
      * 恢复模糊背景
      */
     setEbg(newStageState.bgName, 0);
-  });
+  }, true, loadFile.nowStageState);
 }

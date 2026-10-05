@@ -11,6 +11,7 @@ import Logo from '@/UI/Logo/Logo';
 import { Extra } from '@/UI/Extra/Extra';
 import Menu from '@/UI/Menu/Menu';
 import GlobalDialog from '@/UI/GlobalDialog/GlobalDialog';
+import CharacterLoading from '@/UI/CharacterLoading/CharacterLoading';
 import PanicOverlay from '@/UI/PanicOverlay/PanicOverlay';
 import DevPanel from '@/UI/DevPanel/DevPanel';
 import { RootState, webgalStore } from '@/store/store';
@@ -111,6 +112,7 @@ export default function App() {
       <Extra />
       <Menu />
       <GlobalDialog />
+      <CharacterLoading />
       <PanicOverlay />
       <DevPanel />
     </div>

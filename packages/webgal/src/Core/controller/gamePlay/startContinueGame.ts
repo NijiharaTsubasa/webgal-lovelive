@@ -1,6 +1,5 @@
 import { assetSetter, fileType } from '../../util/gameAssetsAccess/assetSetter';
-import { sceneFetcher } from '../scene/sceneFetcher';
-import { sceneParser } from '../../parser/sceneParser';
+import { changeScene } from '../scene/changeScene';
 import { resetStage } from '@/Core/controller/stage/resetStage';
 import { webgalStore } from '@/store/store';
 import { setVisibility } from '@/store/GUIReducer';
@@ -20,14 +19,9 @@ export const startGame = () => {
 
   // 重新获取初始场景
   const sceneUrl: string = assetSetter('start.txt', fileType.scene);
-  // 场景写入到运行时
-  sceneFetcher(sceneUrl).then((rawScene) => {
-    WebGAL.sceneManager.sceneData.currentScene = sceneParser(rawScene, 'start.txt', sceneUrl);
-    WebGAL.flowchartManager.waitForCurrentSceneDialog();
-    // 开始第一条语句
-    continueSentence();
-  });
+  const pending = changeScene(sceneUrl, 'start.txt');
   webgalStore.dispatch(setVisibility({ component: 'showTitle', visibility: false }));
+  return pending;
 };
 
 export async function continueGame() {

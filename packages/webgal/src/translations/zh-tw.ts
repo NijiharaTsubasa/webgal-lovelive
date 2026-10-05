@@ -5,6 +5,12 @@ const zhTw = {
     no: '否',
   },
 
+  characterLoading: {
+    preparing: '正在準備角色',
+    failed: '角色載入失敗',
+    retry: '重試',
+  },
+
   menu: {
     options: {
       title: '設定',
@@ -12,6 +18,17 @@ const zhTw = {
         system: {
           title: '系統',
           options: {
+            characterLoading: {
+              title: '角色載入',
+              options: {
+                scene: '場景預載入（均衡）',
+                onDemand: '按需載入',
+              },
+              description: {
+                scene: '適合錄製影片和一般遊玩。進入場景前準備角色；同一場景不宜包含過多不同的 3D 模型，以免佔用過多顯示記憶體。',
+                onDemand: '更節省 GPU 資源，適合同一場景角色種類多、短時間只使用少量角色，或臨時多人同屏。播放期間在背景準備近期角色；切換時尚未準備好才顯示載入畫面。頻繁切換新模型可能增加等待。',
+              },
+            },
             autoSpeed: {
               title: '自動播放速度',
               options: {

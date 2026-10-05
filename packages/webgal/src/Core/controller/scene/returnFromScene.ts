@@ -13,12 +13,10 @@ export const returnFromScene = (returnValue: string | boolean | number = '') => 
   if (WebGAL.sceneManager.lockSceneWrite) {
     return;
   }
-  const entry = WebGAL.sceneManager.popFrame();
-  if (!entry) {
-    return;
-  }
-  if (entry.writeReturnTo) {
-    setGameVar({ key: entry.writeReturnTo, value: returnValue });
-  }
-  restoreScene(entry);
+  const entry = WebGAL.sceneManager.sceneData.sceneStack[WebGAL.sceneManager.sceneData.sceneStack.length - 1];
+  if (!entry) return;
+  return restoreScene(entry, () => {
+    WebGAL.sceneManager.popFrame();
+    if (entry.writeReturnTo) setGameVar({ key: entry.writeReturnTo, value: returnValue });
+  });
 };

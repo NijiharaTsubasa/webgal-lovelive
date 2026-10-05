@@ -1,0 +1,51 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scene {
+  z-index: 24;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.stage {
+  z-index: 13;
+}
+
+.indicator {
+  position: absolute;
+  left: var(--character-loading-anchor-x, calc(100% - 65px));
+  top: calc(var(--character-loading-anchor-y, calc(100% - 61px)) + 8px);
+  transform: translateX(-100%);
+  text-align: right;
+}
+
+.image {
+  width: 274px;
+  height: 33px;
+  background-image: url('../../assets/image/now-loading.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.error {
+  color: #ff3b72;
+  font-size: 140%;
+  text-shadow: 0 0 4px white;
+}
+
+.retry {
+  margin-top: 1rem;
+  padding: 0.5em 1.5em;
+  border: 1px solid currentColor;
+  border-radius: 0.4rem;
+  background: white;
+  color: #ff3b72;
+  font: inherit;
+  font-size: 140%;
+  cursor: pointer;
+  pointer-events: auto;
+}

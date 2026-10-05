@@ -1,4 +1,6 @@
 import { loadGameFromStageData } from '@/Core/controller/storage/loadGame';
+import { cancelPendingForward } from '@/Core/controller/gamePlay/nextSentence';
+import { stopAll } from '@/Core/controller/gamePlay/fastSkip';
 import { IFlowchart, IFlowchartEdge, IFlowchartNode } from '@/Core/Modules/flowchart';
 import { WebGAL } from '@/Core/WebGAL';
 import useSoundEffect from '@/hooks/useSoundEffect';
@@ -75,6 +77,8 @@ export const Flowchart = () => {
     }
     if (!currentFlowchart || !WebGAL.flowchartManager.isUnlocked(currentFlowchart.id, node.id)) return;
     playSeClick();
+    stopAll();
+    cancelPendingForward();
     WebGAL.flowchartManager.loadSnapshot(currentFlowchart.id, node.id).then((snapshot) => {
       if (!snapshot) return;
       loadGameFromStageData(snapshot);
