@@ -88,6 +88,36 @@ test('runtime update forwards the original delta and disposal stops future updat
   assert.deepEqual(calls,[['update',.25],['update',.05],['dispose']]);
 });
 
+test('Focus commands are independent, copied, deduplicated and retained through motion and face changes',async()=>{
+  const {GltfCharacterRuntime}=load(),calls=[];
+  const actor={setFocus:value=>calls.push({...value}),setMotion:async()=>{},setExpression:async()=>{},dispose(){}};
+  const a=new GltfCharacterRuntime(actor),b=new GltfCharacterRuntime({setFocus:value=>calls.push(['b',{...value}])});
+  const value={x:.5,y:-.25,instant:false};
+  a.setFocus(value);value.x=1;
+  a.setFocus({x:.5,y:-.25,instant:false});
+  a.setMotion('m');a.setExpression('face');
+  b.setFocus({x:-1,y:1,instant:true});
+  a.setFocus({x:.5,y:-.25,instant:true});
+  a.dispose();a.setFocus({x:0,y:0,instant:false});
+  assert.deepEqual(calls,[{x:.5,y:-.25,instant:false},['b',{x:-1,y:1,instant:true}],{x:.5,y:-.25,instant:true}]);
+});
+
+test('direct creation supplies Focus to the initial renderer options',async t=>{
+  setGlobal(t,'document',{baseURI:'http://localhost/'});
+  let supplied;
+  const api=load({takePreloaded:()=>null,create:o=>{supplied=o;return {setFocus(){}};}});
+  await api.createGltfCharacter('game/a/config.json',100,100,{focus:{x:.75,y:.2,instant:true}});
+  assert.deepEqual(supplied.focus,{x:.75,y:.2,instant:true});
+});
+
+test('a claimed pooled actor receives the latest Focus rather than retaining its warmup state',async t=>{
+  setGlobal(t,'document',{baseURI:'http://localhost/'});
+  const calls=[],actor={setFocus:value=>calls.push({...value})};
+  const api=load({takePreloaded:()=>actor,create:()=>{throw Error('should reuse');}});
+  await api.createGltfCharacter('game/a/config.json',100,100,{focus:{x:-.75,y:0,instant:true}});
+  assert.deepEqual(calls,[{x:-.75,y:0,instant:true}]);
+});
+
 
 test('experimental mesh cloth setting reaches direct and preloaded actors without disabling bone physics', async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});

@@ -45,6 +45,7 @@ function fixture() {
     activate() { this.isActive = true; this.disposed = false; }
     setMotion(value) { this.motion = value; }
     setExpression(value) { this.expression = value; }
+    setFocus(value) { this.focus = {...value}; }
     update() {}
     async prepare() { this.actor.prepared = (this.actor.prepared ?? 0) + 1; await onPrepare?.(this.actor); if (prepareFailure) { const error = prepareFailure; prepareFailure = undefined; throw error; } }
     dispose() { if (this.disposed) return; this.disposed = true; this.isActive = false; this.release(); }
@@ -70,12 +71,13 @@ function fixture() {
       normalizeFigureBounds: bounds => bounds ?? [0,0,1,1],
     },
     '@/Core/WebGAL': { WebGAL: { stageWidth:1920, stageHeight:1080, sceneManager:{sceneData}, gameplay:{pixiStage:{getStageObjByKey: key => displayed.get(key)}} } },
+    '@/Core/live2DCore': {baseFocusParam:{x:0,y:0,instant:false}},
     '@/Core/util/sceneCharacterLoading': { registerSceneCharacterLoadingHooks(value) { hooks = value; }, getCharacterLoadingMode: () => mode },
     './gltfCharacter': { GltfCharacterRuntime:Runtime, characterOptions:async url => ({modelUrl:url}), preloadGltfNamedResources:async () => {} },
     './fixedGltfResources': { resolveFigureConfig:async url => ({gltf:url.endsWith('/config.json')}) },
     'webgal-lovelive-gltf-renderer': { OffscreenCharacter:Actor, CharacterRenderSurface:Surface },
   });
-  const state = (items) => ({figureLeft:'',figureCenter:'',figureRight:'',freeFigure:items.map(([key,url]) => ({key,name:url,basePosition:'center'})), live2dMotion:[],live2dExpression:[]});
+  const state = (items) => ({figureLeft:'',figureCenter:'',figureRight:'',freeFigure:items.map(([key,url]) => ({key,name:url,basePosition:'center'})), live2dMotion:[],live2dExpression:[],live2dFocus:[]});
   const signal = () => new AbortController().signal;
   const take = (key,url,position='center') => {
     const runtime = api.takePreparedGltfCharacter(key,url,position,[0,0,1,1]);
@@ -91,6 +93,19 @@ function fixture() {
   };
 }
 const a = '/a/config.json', b = '/b/config.json';
+
+test('stage restoration and reused preheated actors receive the current Focus before display',async()=>{
+  const f=fixture();
+  const first=f.state([['actor',a]]);first.live2dFocus=[{target:'actor',focus:{x:.4,y:-.3,instant:true}}];
+  await f.hooks.prepareStage(first,f.signal());
+  const actor=f.take('actor',a);
+  assert.deepEqual(actor.focus,{x:.4,y:-.3,instant:true});
+  actor.dispose();
+  const next=f.state([['actor',a]]);next.live2dFocus=[{target:'actor',focus:{x:-.6,y:.2,instant:false}}];
+  await f.hooks.prepareStage(next,f.signal());
+  assert.equal(f.take('actor',a),actor);
+  assert.deepEqual(actor.focus,{x:-.6,y:.2,instant:false});
+});
 
 test('scene preloads distinct characters in one slot and reuses actors when they return', async () => {
   const f = fixture();

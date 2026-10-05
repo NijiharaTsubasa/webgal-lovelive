@@ -1,10 +1,10 @@
 import { webgalStore } from '@/store/store';
 import type { OffscreenCharacter } from 'webgal-lovelive-gltf-renderer';
-import type { BlinkParam } from '@/Core/live2DCore';
+import type { BlinkParam, FocusParam } from '@/Core/live2DCore';
 import type { GltfPreloadRequest } from '@/Core/util/prefetcher/gltfPrefetchPlan';
 import { fixedGltfResources, resolveFigureConfig } from './fixedGltfResources';
 
-export interface GltfInitialState { motion?: string; expression?: string }
+export interface GltfInitialState { motion?: string; expression?: string; focus?: FocusParam }
 const pendingClaims = new Set<Promise<void>>();
 
 /** Package entry points are config.json; ordinary Live2D model.json is unaffected. */
@@ -71,11 +71,14 @@ export async function createGltfCharacter(url: string, width: number, height: nu
   try {
     const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
     const options = { ...await characterOptions(url, width, height),
-      motion: initial.motion ?? '', expression: initial.expression ?? '' };
+      motion: initial.motion ?? '', expression: initial.expression ?? '',
+      ...(initial.focus ? {focus: initial.focus} : {}) };
     const pending = OffscreenCharacter.takePreloaded(options);
     pendingClaims.delete(claim);
     release();
     const character = (await pending) ?? (await OffscreenCharacter.create(options));
+    // A pooled instance was prepared before this display's stage state was known.
+    if (initial.focus) character.setFocus(initial.focus);
     return new GltfCharacterRuntime(character, options);
   } finally {
     pendingClaims.delete(claim);
@@ -90,6 +93,7 @@ export class GltfCharacterRuntime {
   private motion: string | undefined;
   private expression: string | undefined;
   private blink: BlinkParam | undefined;
+  private focus: FocusParam | undefined;
   private commandErrors: Partial<Record<'motion' | 'expression', unknown>> = {};
   private commandGenerations = { motion: 0, expression: 0 };
   private active = true;
@@ -97,6 +101,7 @@ export class GltfCharacterRuntime {
     private readonly release?: () => void) {
     this.motion = initial.motion;
     this.expression = initial.expression;
+    this.focus = initial.focus && { ...initial.focus };
   }
   public get canvas(): HTMLCanvasElement {
     return this.character.canvas;
@@ -147,6 +152,12 @@ export class GltfCharacterRuntime {
   }
   public setMouth(value: number | null) {
     if (!this.disposed) this.character.setMouth(value);
+  }
+  public setFocus(value: FocusParam) {
+    if (this.disposed || (this.focus?.x === value.x && this.focus?.y === value.y
+      && this.focus?.instant === value.instant)) return;
+    this.focus = { ...value };
+    this.character.setFocus(this.focus);
   }
   public update(delta: number) {
     if (this.isActive) this.character.update(delta);

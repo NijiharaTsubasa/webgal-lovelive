@@ -21,7 +21,7 @@ const compiled = ts.transpileModule(`class Stage { ${method} }`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const makeStage = new Function('PIXI', 'WebGALPixiContainer', 'uuid', 'stageStateManager',
-  'createGltfCharacter', 'GltfCharacterSprite', 'baseBlinkParam', 'logger', 'takePreparedGltfCharacter', 'normalizeFigureBounds', compiled + '\nreturn Stage;');
+  'createGltfCharacter', 'GltfCharacterSprite', 'baseBlinkParam', 'logger', 'takePreparedGltfCharacter', 'normalizeFigureBounds', 'baseFocusParam', compiled + '\nreturn Stage;');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function deferred() {
   let resolve, reject;
@@ -30,14 +30,14 @@ function deferred() {
 }
 function fixture(t) {
   const ticker = new Ticker(), loads = [], errors = [], events = [];
+  const state={live2dMotion: [], live2dExpression: [], live2dBlink: [], live2dFocus: []};
   let id = 0;
   class Container extends EventEmitter {}
   const Stage = makeStage({ BaseTexture: class {}, Texture: class { constructor() {
     return { baseTexture: { update() { events.push('upload'); } }, destroy() { events.push('texture-dispose'); } };
-  } } }, Container, () => String(++id), { getViewStageState: () => ({
-    live2dMotion: [], live2dExpression: [], live2dBlink: [],
-  }) }, () => { const load = deferred(); loads.push(load); return load.promise; },
-  class Sprite { width = 1; height = 1; }, {}, { error: (...args) => errors.push(args) }, () => undefined, bounds => bounds ?? [0,0,0,0]);
+  } } }, Container, () => String(++id), { getViewStageState: () => state },
+  () => { const load = deferred(); loads.push(load); return load.promise; },
+  class Sprite { width = 1; height = 1; }, {}, { error: (...args) => errors.push(args) }, () => undefined, bounds => bounds ?? [0,0,0,0], {x:0,y:0,instant:false});
   const stage = new Stage();
   Object.assign(stage, { currentApp: { ticker }, figureObjects: [], stageWidth: 100, stageHeight: 100,
     figureContainer: { addChild() {} }, applyFigureMetadata() {}, getCurrentMouthValue: () => null,
@@ -50,14 +50,25 @@ function fixture(t) {
     }, setContainerInitialPosition() {}, notifyTargetReferenceBoxChanged() {}, requestRender() {},
   });
   const runtime = (name, preparation = Promise.resolve()) => ({
-    isActive: true, canvas: {}, setMotion() {}, setExpression() {}, setBlinkParameters() {}, setMouth() {},
+    isActive: true, canvas: {}, setMotion() {}, setExpression() {}, setBlinkParameters() {}, setMouth() {}, setFocus() {},
     prepare: () => preparation,
     update(delta) { events.push(['update', name, delta]); }, dispose() { events.push(['dispose', name]); },
   });
   t.after(() => { for (const object of [...stage.figureObjects]) object.disposeGltf?.(); ticker.destroy(); });
   const tick = () => { if (ticker.lastTime < 0) ticker.lastTime = 0; ticker.update(ticker.lastTime + 20); };
-  return { stage, ticker, loads, events, errors, runtime, tick };
+  return { stage, ticker, loads, events, errors, runtime, tick, state };
 }
+
+test('first uploaded canvas applies Focus received while the actor was loading',async t=>{
+  const f=fixture(t),actor=f.runtime('a');
+  actor.setFocus=value=>f.events.push(['focus',{...value}]);
+  f.stage.addGltfFigure('a','a');
+  f.state.live2dFocus=[{target:'a',focus:{x:1,y:-.5,instant:true}}];
+  f.loads[0].resolve(actor);await flush();
+  assert.deepEqual(f.events.slice(0,3),[
+    ['focus',{x:1,y:-.5,instant:true}],['update','a',0],'upload',
+  ]);
+});
 
 test('prepared actors attach one update listener each and remove it with the instance', async t => {
   const f = fixture(t), prep = deferred();
@@ -88,7 +99,7 @@ for (const loss of ['removed', 'missing', 'failed']) test(`${loss} during prepar
 test('update failure removes the listener of only the failed instance', async t => {
   const f = fixture(t);
   f.stage.addGltfFigure('a', 'a'); f.stage.addGltfFigure('b', 'b');
-  const broken = f.runtime('a'); broken.update = () => { throw new Error('update failed'); };
+  const broken = f.runtime('a'); broken.update = delta => { if (delta > 0) throw new Error('update failed'); };
   f.loads[0].resolve(broken); f.loads[1].resolve(f.runtime('b')); await flush();
   f.events.length = 0; f.tick();
   assert.equal(f.ticker.count, 1);

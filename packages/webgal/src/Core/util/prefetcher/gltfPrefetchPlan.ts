@@ -4,6 +4,7 @@ import {
   type IFigurePosition, type IStageState,
 } from '@/Core/Modules/stage/stageInterface';
 import { getBooleanArgByKey, getFigurePositionFromArgs, getStringArgByKey } from '@/Core/util/getSentenceArg';
+import type { FocusParam } from '@/Core/live2DCore';
 
 export interface GltfPreloadRequest {
   url: string;
@@ -19,6 +20,7 @@ export interface ProjectedGltfFigure {
   motion: string;
   expression: string;
   createdAt: number;
+  focus?: FocusParam;
 }
 
 type Figure = ProjectedGltfFigure;

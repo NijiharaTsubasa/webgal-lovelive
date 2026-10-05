@@ -642,6 +642,8 @@ export default class PixiStage {
           const state = stageStateManager.getViewStageState();
           loaded.setMotion(state.live2dMotion.find((item) => item.target === object.key)?.motion ?? '');
           loaded.setExpression(state.live2dExpression.find((item) => item.target === object.key)?.expression ?? '');
+          loaded.setFocus({ ...baseFocusParam,
+            ...state.live2dFocus.find((item) => item.target === object.key)?.focus });
           loaded.setBlinkParameters({
             ...baseBlinkParam,
             ...state.live2dBlink.find((item) => item.target === object.key)?.blink,
@@ -654,6 +656,8 @@ export default class PixiStage {
           object.disposeGltf?.();
           return;
         }
+        // Prepared actors may have been warmed before the latest Focus command.
+        loaded.update(0);
         // A retiring sprite keeps its uploaded image while this canvas changes owners.
         // Give each lease its own Pixi texture instead of the canvas-keyed cache.
         texture = new PIXI.Texture(new PIXI.BaseTexture(loaded.canvas));
@@ -685,6 +689,7 @@ export default class PixiStage {
     else void createGltfCharacter(url, this.stageWidth, this.stageHeight, {
       motion: initialState.live2dMotion.find(item => item.target === key)?.motion ?? '',
       expression: initialState.live2dExpression.find(item => item.target === key)?.expression ?? '',
+      focus: { ...baseFocusParam, ...initialState.live2dFocus.find(item => item.target === key)?.focus },
     }).then(loaded => attach(loaded)).catch(failed);
   }
 
@@ -1436,6 +1441,10 @@ export default class PixiStage {
 
   public changeModelFocusByKey(key: string, focusParam: FocusParam) {
     const target = this.figureObjects.find((e) => e.key === key && !e.isExiting);
+    if (target?.sourceType === 'gltf') {
+      target.gltfRuntime?.setFocus({ ...baseFocusParam, ...focusParam });
+      return;
+    }
     if (target?.sourceType !== 'live2d') return;
     const figureRecordTarget = this.live2dFigureRecorder.find((e) => e.target === key);
     if (target && !isEqual(figureRecordTarget?.focus, focusParam)) {

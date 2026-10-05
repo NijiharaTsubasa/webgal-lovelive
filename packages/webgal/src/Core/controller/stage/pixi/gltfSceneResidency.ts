@@ -6,6 +6,7 @@ import type { ProjectedGltfFigure } from '@/Core/util/prefetcher/gltfPrefetchPla
 import { planGltfSceneResidency, gltfFigureIdentity } from '@/Core/util/prefetcher/gltfScenePlan';
 import { characterOptions, GltfCharacterRuntime, preloadGltfNamedResources } from './gltfCharacter';
 import { resolveFigureConfig } from './fixedGltfResources';
+import { baseFocusParam } from '@/Core/live2DCore';
 
 type Surface = import('webgal-lovelive-gltf-renderer').CharacterRenderSurface;
 interface Resident { identity: string; runtime: GltfCharacterRuntime; actor: import('webgal-lovelive-gltf-renderer').OffscreenCharacter; slot: number; lastUse: number; warmedMotion?: string; warmedExpression?: string; backgroundReady?: boolean }
@@ -56,6 +57,7 @@ function stageFigures(state: IStageState) {
     bounds: normalizeFigureBounds(state.live2dMotion.find(value => value.target === item.key)?.overrideBounds),
     motion: state.live2dMotion.find(value => value.target === item.key)?.motion ?? '',
     expression: state.live2dExpression.find(value => value.target === item.key)?.expression ?? '', createdAt: -1,
+    focus: { ...baseFocusParam, ...state.live2dFocus.find(value => value.target === item.key)?.focus },
   } as ProjectedGltfFigure }));
 }
 async function addResident(owner: Residency, slot: number, key: string, figure: ProjectedGltfFigure, signal: AbortSignal) {
@@ -63,7 +65,8 @@ async function addResident(owner: Residency, slot: number, key: string, figure: 
   const options = await characterOptions(figure.url, WebGAL.stageWidth, WebGAL.stageHeight);
   assertCurrent(signal);
   const surface = owner.surfaces[slot] ?? (owner.surfaces[slot] = new CharacterRenderSurface(options));
-  const actor = await OffscreenCharacter.create({ ...options, motion: figure.motion, expression: figure.expression, surface });
+  const actor = await OffscreenCharacter.create({ ...options, motion: figure.motion, expression: figure.expression,
+    focus: figure.focus, surface });
   if (signal.aborted) { actor.dispose(); assertCurrent(signal); }
   let record!: Resident;
   const runtime = new GltfCharacterRuntime(actor, figure, () => {
@@ -166,6 +169,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
       continue;
     }
     if (!owner.active.has(record)) { record.runtime.activate(); record.runtime.suspend(); }
+    record.runtime.setFocus(figure.focus ?? baseFocusParam);
     if (!record.backgroundReady || record.warmedMotion !== figure.motion || record.warmedExpression !== figure.expression) {
       record.runtime.setMotion(figure.motion);
       record.runtime.setExpression(figure.expression);
@@ -224,7 +228,10 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
       continue;
     }
     used.add(record.slot);
-    if (!owner.active.has(record)) { held.push(record); prepared.set(identity, record); }
+    if (!owner.active.has(record)) {
+      record.runtime.setFocus(figure.focus ?? baseFocusParam);
+      held.push(record); prepared.set(identity, record);
+    }
     if (figure.motion) named.push({kind: 'motion', name: figure.motion});
     if (figure.expression) named.push({kind: 'expression', name: figure.expression});
   }
