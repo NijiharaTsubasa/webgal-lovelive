@@ -37,6 +37,16 @@ const figure = (model,args={}) => sentence(C.changeFigure,model ? `game/${model}
 const say = () => sentence(C.say,'pause');
 const plan = (list,state=empty(),start=0,limit=20) => planGltfPreloads({sceneUrl:'test',sentenceList:list},start,state,'visit',limit);
 
+test('native expression combinations survive script prediction and restored stage state verbatim', () => {
+  const expression='3d:Sad%2FWink/Smile%25/A%20wide';
+  const initial=plan([figure('a',{expression,next:true}),say()]);
+  assert.equal(initial.requests[0].expression,expression);
+  const state=empty();state.figName='game/a/config.json';
+  state.live2dExpression=[{target:'fig-center',expression}];
+  const restored=plan([figure('a',{next:true}),say()],JSON.parse(JSON.stringify(state)));
+  assert.deepEqual(restored.named,[{kind:'expression',name:expression}]);
+});
+
 test('plans repeated model lifetimes and retains simultaneous instances while reusing unchanged slots', () => {
   const result=plan([
     figure('a',{left:true,motion:'first',expression:'smile',next:true}),figure('b',{right:true,next:true}),say(),
