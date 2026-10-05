@@ -3,6 +3,7 @@ import { isUndefined, omitBy } from 'lodash';
 import { commandType } from '@/Core/controller/scene/sceneInterface';
 import { STAGE_KEYS } from '@/Core/constants';
 import { baseBlinkParam, baseFocusParam } from '@/Core/live2DCore';
+import { isCharacterLoadingBusy } from '@/Core/util/sceneCharacterLoading';
 import {
   baseTransform,
   FIGURE_KEYS,
@@ -363,6 +364,9 @@ export class StageStateManager {
   }
 
   public commit(options: IStageCommitOptions = {}) {
+    // Old perform callbacks may finish while the next group is being prepared.
+    // Keep its calculation state private until the loading owner publishes it.
+    if (isCharacterLoadingBusy()) return;
     const resolvedOptions: IResolvedStageCommitOptions = {
       syncPixiStage: options.syncPixiStage ?? true,
       applyPixiEffects: options.applyPixiEffects ?? true,

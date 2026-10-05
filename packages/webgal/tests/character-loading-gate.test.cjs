@@ -11,8 +11,32 @@ function fixture(){
  const filename=path.join(root,rel),m=new Module(filename,module);cache.set(rel,m);m.paths=Module._nodeModulePaths(path.dirname(filename));
  m.require=name=>{if(name.startsWith('@/')||name.startsWith('.')){let file=name.startsWith('@/')?name.slice(2):path.relative(root,path.resolve(path.dirname(filename),name)).replaceAll('\\','/');return load(file.endsWith('.ts')?file:file+'.ts');}return Module.prototype.require.call(m,name);};
  m._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,filename);return m.exports;}
- return {load,calls,WebGAL,state};
+ return {load,calls,WebGAL,state,mocks};
 }
+
+for (const kind of ['scene','stage']) test(`background -next completion cannot publish Anon or dialogue during ${kind} loading`,()=>{
+ const f=fixture();delete f.mocks['Core/Modules/stage/stageStateManager.ts'];
+ f.mocks['Core/live2DCore.ts']={baseBlinkParam:{},baseFocusParam:{}};
+ const {stageStateManager:stage}=f.load('Core/Modules/stage/stageStateManager.ts');
+ const loading=f.load('Core/util/sceneCharacterLoading.ts');
+ const {PerformController}=f.load('Core/Modules/perform/performController.ts');
+ const controller=new PerformController(),shown=[];
+ stage.setStage('figName','old.png');stage.commit();
+ stage.setCommitHandler(state=>shown.push([state.figNameLeft,state.figNameRight,state.showText]));
+ stage.setStage('figNameLeft','3d/new/config.json');
+ stage.setStage('figNameRight','live2d/new/model.json');
+ stage.setStage('showText','Hello World!');
+ const perform={performName:'animation-bg-main',isStarted:true,stopFunction(){},blockingNext:()=>false};
+ controller.performList.push(perform);
+ stage.addPerform({id:perform.performName,isHoldOn:false,script:{}});
+ const ticket=loading.beginCharacterLoading(kind);
+ controller.softUnmountPerformObject(perform);
+ assert.deepEqual(shown,[],'no queued character may reach Pixi before group preparation completes');
+ assert.equal(stage.getViewStageState().figNameRight,'');
+ assert.equal(stage.getViewStageState().showText,'');
+ ticket.succeed();stage.commit();
+ assert.deepEqual(shown,[['3d/new/config.json','live2d/new/model.json','Hello World!']]);
+});
 test('whole -next group waits before commit; repeated clicks and internal next cannot advance',async()=>{
  const f=fixture(),wait=deferred(),loading=f.load('Core/util/sceneCharacterLoading.ts'),next=f.load('Core/controller/gamePlay/nextSentence.ts');let observed;
  loading.registerSceneCharacterLoadingHooks({prepareStage:async s=>{observed=s;await wait.promise;},prepareScene:async()=>{}});
