@@ -24,6 +24,7 @@ import { assignPixiTransform } from './stageEffectTransform';
 import { createGltfCharacter, type GltfCharacterRuntime } from './gltfCharacter';
 import { takePreparedGltfCharacter } from './gltfSceneResidency';
 import { GltfCharacterSprite } from './GltfCharacterSprite';
+import { webgalStore } from '@/store/store';
 
 export interface IAnimationObject {
   setStartState: Function;
@@ -207,6 +208,13 @@ export default class PixiStage {
       this.backgroundContainer,
     );
     this.currentApp = app;
+    let showTitle = webgalStore.getState().GUI.showTitle;
+    webgalStore.subscribe(() => {
+      const nextShowTitle = webgalStore.getState().GUI.showTitle;
+      if (nextShowTitle === showTitle) return;
+      showTitle = nextShowTitle;
+      this.updateTickerStatus();
+    });
     // loader 防死
     const reload = () => {
       setTimeout(reload, 500);
@@ -223,6 +231,7 @@ export default class PixiStage {
 
     requestAnimationFrame(() => {
       this.isRenderPending = false;
+      if (webgalStore.getState().GUI.showTitle) return;
       if (!this.currentApp?.ticker.started) {
         this.currentApp?.render();
       }
@@ -1894,6 +1903,11 @@ export default class PixiStage {
   }
 
   private updateTickerStatus() {
+    // Keep resident actors, but stop their updates and canvas uploads while covered by the title.
+    if (webgalStore.getState().GUI.showTitle) {
+      this.currentApp?.ticker.stop();
+      return;
+    }
     if (this.isTickerUpdatePending) return;
     this.isTickerUpdatePending = true;
 
@@ -1901,6 +1915,10 @@ export default class PixiStage {
       this.isTickerUpdatePending = false;
       const app = this.currentApp;
       if (!app) return;
+      if (webgalStore.getState().GUI.showTitle) {
+        app.ticker.stop();
+        return;
+      }
 
       const hasActiveAnimations = this.stageAnimations.length > 0;
       const allObjects = [...this.figureObjects, ...this.backgroundObjects];
