@@ -37,8 +37,6 @@ const MOUTH_ANIMATION_CONFIG = {
     min: 50, // 最小音频级别（闭合）
     max: 100, // 最大音频级别（张开）
   },
-  // 结束动画阈值
-  endThreshold: 0.95,
 } as const;
 
 // 口部动画状态接口
@@ -50,7 +48,6 @@ interface MouthAnimationState {
   holdStartTime: number;
   isHolding: boolean;
   lastFrameTime: number;
-  isEnding: boolean;
   cycleStartTime: number;
   pauseStartTime: number;
 }
@@ -121,7 +118,6 @@ const initializeMouthAnimationState = (currentTime: number): MouthAnimationState
   holdStartTime: 0,
   isHolding: false,
   lastFrameTime: currentTime,
-  isEnding: false,
   cycleStartTime: currentTime,
   pauseStartTime: 0,
 });
@@ -210,48 +206,22 @@ export const say = (sentence: ISentence): IPerform => {
   let mouthAnimationState: MouthAnimationState | undefined;
   let performSimulateVocalAnimationId: number | null = null;
 
-  const performSimulateVocal = (end = false) => {
+  const performSimulateVocal = () => {
+    if (stageStateManager.getViewStageState().currentDialogKey !== dialogKey) {
+      if (performSimulateVocalAnimationId !== null) cancelAnimationFrame(performSimulateVocalAnimationId);
+      performSimulateVocalAnimationId = null;
+      return;
+    }
     // 如果 mouthAnimationState 未初始化，直接返回
     if (!mouthAnimationState) {
       return;
     }
 
     const currentTime = Date.now();
-    const currentStageState = stageStateManager.getCalculationStageState();
+    const currentStageState = stageStateManager.getViewStageState();
     const figureAssociatedAnimation = currentStageState.figureAssociatedAnimation;
     const animationItem = figureAssociatedAnimation.find((tid) => tid.targetId === key);
     const targetKey = key ? key : `fig-${pos}`;
-
-    if (end) {
-      // 标记开始结束动画
-      mouthAnimationState.isEnding = true;
-      // 不立即结束，让动画完成当前周期
-    }
-
-    // 检查是否正在结束动画
-    if (mouthAnimationState.isEnding) {
-      // 计算当前周期的时间进度
-      const cycleElapsedTime = currentTime - mouthAnimationState.cycleStartTime;
-      const cycleProgress = (cycleElapsedTime / mouthAnimationState.currentCycleDuration) % 1;
-
-      // 如果当前周期已经完成（接近结束），则真正结束动画
-      if (cycleProgress >= MOUTH_ANIMATION_CONFIG.endThreshold) {
-        // 结束动画，口部闭合
-        applyMouthAnimation({
-          targetKey,
-          audioLevel: MOUTH_ANIMATION_CONFIG.audioLevelMapping.min,
-          animationItem,
-          pos,
-        });
-
-        // 取消动画帧
-        if (performSimulateVocalAnimationId !== null) {
-          cancelAnimationFrame(performSimulateVocalAnimationId);
-          performSimulateVocalAnimationId = null;
-        }
-        return;
-      }
-    }
 
     // 帧率控制：检查是否需要跳过这一帧
     if (currentTime - mouthAnimationState.lastFrameTime < MOUTH_ANIMATION_CONFIG.frameRate) {
@@ -268,7 +238,6 @@ export const say = (sentence: ISentence): IPerform => {
         // 重新开始当前周期
         mouthAnimationState.cycleStartTime = currentTime;
         mouthAnimationState.isHolding = false; // 重置停留状态
-        mouthAnimationState.isEnding = false; // 重置结束状态
         // 随机生成新的周期持续时间
         mouthAnimationState.currentCycleDuration = generateRandomCycleDuration();
       } else {
@@ -365,11 +334,6 @@ export const say = (sentence: ISentence): IPerform => {
   // 播放一段语音
   if (vocal) {
     WebGAL.gameplay.performController.arrangeNewPerform(playVocal(sentence), sentence, false);
-  } else if (key || pos) {
-    // 初始化口部动画状态
-    const currentTime = Date.now();
-    mouthAnimationState = initializeMouthAnimationState(currentTime);
-    performSimulateVocal();
   }
 
   const performInitName: string = getRandomPerformName();
@@ -383,15 +347,20 @@ export const say = (sentence: ISentence): IPerform => {
     performName: performInitName,
     duration: sentenceDelay + endDelay + performSimulateVocalDelay,
     isHoldOn: false,
+    startFunction: () => {
+      if (!vocal && (key || pos)) {
+        mouthAnimationState = initializeMouthAnimationState(Date.now());
+        performSimulateVocal();
+      }
+    },
     stopFunction: () => {
       WebGAL.events.textSettle.emit();
       if (performSimulateVocalAnimationId !== null) {
         cancelAnimationFrame(performSimulateVocalAnimationId);
         performSimulateVocalAnimationId = null;
       }
-      // 只有在有动画运行时才正确结束动画
-      if (mouthAnimationState) {
-        performSimulateVocal(true);
+      if (mouthAnimationState && stageStateManager.getViewStageState().currentDialogKey === dialogKey) {
+        WebGAL.gameplay.pixiStage?.resetMouthY(key || `fig-${pos}`);
       }
     },
     blockingNext: () => false,

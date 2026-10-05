@@ -26,15 +26,11 @@ export const playVocal = (sentence: ISentence) => {
   let volume = getNumberArgByKey(sentence, 'volume') ?? 100; // 获取语音的音量比
   volume = Math.max(0, Math.min(volume, 100)); // 限制音量在 0-100 之间
 
-  let currentStageState: IStageState;
-  currentStageState = stageStateManager.getCalculationStageState();
-
   let pos = getFigurePositionFromArgs(sentence) || 'center';
 
   let key = getStringArgByKey(sentence, 'figureId') ?? '';
 
-  const freeFigure = currentStageState.freeFigure;
-  const figureAssociatedAnimation = currentStageState.figureAssociatedAnimation;
+  let figureAssociatedAnimation: IStageState['figureAssociatedAnimation'] = [];
   let bufferLength = 0;
 
   // 先停止之前的语音
@@ -68,6 +64,10 @@ export const playVocal = (sentence: ISentence) => {
     skipNextCollect: true,
     startFunction: () => {
       startTimer = setTimeout(async () => {
+        if (isOver) return;
+        const currentStageState = stageStateManager.getViewStageState();
+        const freeFigure = currentStageState.freeFigure;
+        figureAssociatedAnimation = currentStageState.figureAssociatedAnimation;
         const VocalControl = document.getElementById('currentVocal') as HTMLMediaElement | null;
         if (VocalControl === null) {
           isOver = true;
@@ -85,6 +85,7 @@ export const playVocal = (sentence: ISentence) => {
           }
 
           const isAudioContextReady = await ensureAudioContextReady();
+          if (isOver) return;
           if (isAudioContextReady && audioContextWrapper.audioContext) {
             if (!audioContextWrapper.analyser) {
               audioContextWrapper.analyser = audioContextWrapper.audioContext.createAnalyser();
@@ -143,6 +144,7 @@ export const playVocal = (sentence: ISentence) => {
       }, 1);
     },
     stopFunction: () => {
+      isOver = true;
       if (startTimer) clearTimeout(startTimer);
       if (blinkEndTimer) clearTimeout(blinkEndTimer);
       clearInterval(audioContextWrapper.audioLevelInterval);
