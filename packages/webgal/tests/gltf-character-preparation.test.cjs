@@ -87,3 +87,13 @@ test('runtime update forwards the original delta and disposal stops future updat
   runtime.dispose();runtime.update(.5);runtime.dispose();
   assert.deepEqual(calls,[['update',.25],['update',.05],['dispose']]);
 });
+
+
+test('experimental mesh cloth setting reaches direct and preloaded actors without disabling bone physics', async t=>{
+  setGlobal(t,'document',{baseURI:'http://localhost/'});
+  const options=[];
+  const api=load({preload:o=>options.push(o),takePreloaded:o=>{options.push(o);return null;},create:o=>{options.push(o);return {}; }},async url=>({url,gltf:true}),true);
+  await api.preloadGltfCharacter('game/a/config.json',1920,1080);
+  await api.createGltfCharacter('game/a/config.json',1920,1080);
+  for(const o of options){assert.equal(o.meshClothEnabled,true);assert.notEqual(o.physicsEnabled,false);}
+});

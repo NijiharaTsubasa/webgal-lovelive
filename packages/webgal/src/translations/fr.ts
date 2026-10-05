@@ -18,6 +18,14 @@ const fr = {
         system: {
           title: 'Système',
           options: {
+            meshCloth: {
+              experimental: 'Fonctionnalités expérimentales',
+              title: 'Physique des tissus',
+              off: 'Désactivée',
+              on: 'Activée',
+              description: 'Peut réduire les intersections des jupes des personnages Hasunosora, mais augmente fortement le calcul et risque de provoquer des saccades.',
+              titleOnly: 'Revenez au titre pour modifier ce réglage.',
+            },
             characterLoading: {
               title: 'Chargement des personnages',
               options: {

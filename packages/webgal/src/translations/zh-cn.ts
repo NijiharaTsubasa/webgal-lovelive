@@ -18,6 +18,14 @@ const zhCn = {
         system: {
           title: '系统',
           options: {
+            meshCloth: {
+              experimental: '实验性功能',
+              title: '开启布料物理',
+              off: '关',
+              on: '开',
+              description: '开启可缓解莲之空角色的裙子穿模，但会大幅增加计算开销，很可能导致卡顿。',
+              titleOnly: '请返回主界面调整。',
+            },
             characterLoading: {
               title: '角色加载',
               options: {

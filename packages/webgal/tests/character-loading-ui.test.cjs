@@ -32,6 +32,7 @@ test('old and invalid saved settings normalize to scene; on-demand survives and 
   }).outputText;
   const normalize = new Function('initState', 'cloneDeep', `${code}; return normalizeUserData;`)(reducer.initState, require('lodash/cloneDeep'));
   assert.equal(reducer.initState.optionData.characterLoadingMode, 'scene');
+  assert.equal(reducer.initState.optionData.meshClothEnabled, false);
   for (const value of [undefined, 'unknown', null, 5, 'scene', 'on-demand']) {
     const input = { optionData: { characterLoadingMode: value, volumeMain: 72 }, globalGameVar: { flag: true } };
     const result = normalize(input);
@@ -41,6 +42,9 @@ test('old and invalid saved settings normalize to scene; on-demand survives and 
     assert.equal(input.optionData.characterLoadingMode, value);
   }
   assert.equal(normalize({}).optionData.characterLoadingMode, 'scene');
+  for (const value of [undefined, null, 'true', 1, false, true]) assert.equal(normalize({optionData:{meshClothEnabled:value}}).optionData.meshClothEnabled,value === true);
+  const cloth = reducer.default(undefined,reducer.setOptionData({key:'meshClothEnabled',value:true}));
+  assert.equal(reducer.default(cloth,reducer.resetOptionSet()).optionData.meshClothEnabled,false);
   const changed = reducer.default(undefined, reducer.setOptionData({ key: 'characterLoadingMode', value: 'on-demand' }));
   assert.equal(changed.optionData.characterLoadingMode, 'on-demand');
   assert.equal(reducer.default(changed, reducer.resetOptionSet()).optionData.characterLoadingMode, 'scene');
@@ -133,6 +137,34 @@ test('scene loading blocks input while stage loading stays transparent; only ret
   assert.equal(retried, 1); assert.equal(cancelled, 0);
   listener({phase:'idle'}); assert.equal(ui(), null);
   cleanup(); unblock(); assert.equal(unsubscribeCount, 1); assert.equal(removed,6);
+});
+
+
+test('cloth switch is saved at the title, invalidates prepared actors, and is locked during play', () => {
+  const current = { GUI:{showTitle:true},userData:{optionData:{meshClothEnabled:false,characterLoadingMode:'scene'}} };
+  const dispatched=[];let saved=0,released=0;
+  const ui=load('UI/Menu/Options/ThreeD.tsx',{
+    'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props})},
+    'react-redux':{useSelector:fn=>fn(current),useDispatch:()=>action=>dispatched.push(action)},
+    '@/store/store':{webgalStore:{getState:()=>current}},
+    '@/store/userDataReducer':{setOptionData:payload=>payload},
+    '@/Core/controller/storage/storageController':{setStorage:()=>saved++},
+    '@/Core/util/sceneCharacterLoading':{releaseSceneCharacters:()=>released++},
+    '@/hooks/useTrans':{default:()=>(...keys)=>keys.length===1?keys[0]:keys},
+    './options.module.scss':{default:{}},'./System/characterLoadingOption.module.scss':{default:{}},
+    './NormalOption':{NormalOption:'option'},'./NormalButton':{NormalButton:'control'},
+  }).ThreeD;
+  function find(node,predicate){if(!node||typeof node!=='object')return;if(predicate(node))return node;for(const child of [node.props?.children].flat()){const value=find(child,predicate);if(value)return value;}}
+  const control=find(ui(),node=>node.type==='control'&&node.props.textList[0]==='meshCloth.off');
+  assert.equal(control.props.currentChecked,0);
+  control.props.functionList[1]();
+  assert.deepEqual(JSON.parse(JSON.stringify(dispatched)),[{key:'meshClothEnabled',value:true}]);
+  assert.equal(saved,1);assert.equal(released,1);
+  current.GUI.showTitle=false;
+  control.props.functionList[0]();
+  assert.equal(dispatched.length,1,'stale title handler must also reject an in-game click');
+  const tree=ui();assert.ok(find(tree,node=>node.props?.['aria-disabled']===true));
+  assert.ok(find(tree,node=>node.props?.children==='meshCloth.titleOnly'));
 });
 
 

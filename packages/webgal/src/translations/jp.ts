@@ -18,6 +18,14 @@ const jp = {
         system: {
           title: 'システム',
           options: {
+            meshCloth: {
+              experimental: '実験的機能',
+              title: '布の物理演算',
+              off: 'オフ',
+              on: 'オン',
+              description: '蓮ノ空キャラクターのスカートの貫通を軽減できますが、計算負荷が大幅に増え、カクつきが発生する可能性が高くなります。',
+              titleOnly: '変更するにはタイトル画面に戻ってください。',
+            },
             characterLoading: {
               title: 'キャラクターの読み込み',
               options: {

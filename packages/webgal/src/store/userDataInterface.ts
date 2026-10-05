@@ -45,6 +45,7 @@ export const screenRotationOptions: screenRotation[] = ['auto', 'angle0', 'angle
  * @interface IOptionData 用户设置数据接口
  */
 export interface IOptionData {
+  meshClothEnabled: boolean;
   characterLoadingMode: 'scene' | 'on-demand'; // 角色加载方式
   volumeMain: number; // 主音量
   textSpeed: number; // 文字速度

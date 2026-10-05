@@ -18,6 +18,14 @@ const zhTw = {
         system: {
           title: '系統',
           options: {
+            meshCloth: {
+              experimental: '實驗性功能',
+              title: '開啟布料物理',
+              off: '關',
+              on: '開',
+              description: '開啟可緩解蓮之空角色的裙子穿模，但會大幅增加計算開銷，很可能導致卡頓。',
+              titleOnly: '請返回主畫面調整。',
+            },
             characterLoading: {
               title: '角色載入',
               options: {

@@ -1,3 +1,4 @@
+import { webgalStore } from '@/store/store';
 import type { OffscreenCharacter } from 'webgal-lovelive-gltf-renderer';
 import type { BlinkParam } from '@/Core/live2DCore';
 import type { GltfPreloadRequest } from '@/Core/util/prefetcher/gltfPrefetchPlan';
@@ -22,7 +23,7 @@ export async function characterOptions(url: string, width: number, height: numbe
     indexUrl: resourceCatalog.indexUrl,
     resourceCatalog,
     runtime: globalThis,
-    meshClothEnabled: false,
+    meshClothEnabled: webgalStore.getState().userData.optionData.meshClothEnabled === true,
     motion: '',
     expression: '',
     // A full-stage transparent canvas makes the existing left/right figure

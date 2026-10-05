@@ -18,6 +18,14 @@ const en = {
         system: {
           title: 'System',
           options: {
+            meshCloth: {
+              experimental: 'Experimental features',
+              title: 'Cloth physics',
+              off: 'Off',
+              on: 'On',
+              description: 'Can reduce skirt clipping for Hasunosora characters, but greatly increases computation and is likely to cause stuttering.',
+              titleOnly: 'Return to the title screen to change this setting.',
+            },
             characterLoading: {
               title: 'Character loading',
               options: {

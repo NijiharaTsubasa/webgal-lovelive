@@ -18,6 +18,14 @@ const ko = {
         system: {
           title: '시스템',
           options: {
+            meshCloth: {
+              experimental: '실험적 기능',
+              title: '천 물리 활성화',
+              off: '끄기',
+              on: '켜기',
+              description: '하스노소라 캐릭터의 치마 관통을 줄일 수 있지만 계산 부하가 크게 늘어나 끊김이 발생할 가능성이 높습니다.',
+              titleOnly: '변경하려면 타이틀 화면으로 돌아가세요.',
+            },
             characterLoading: {
               title: '캐릭터 로딩',
               options: {

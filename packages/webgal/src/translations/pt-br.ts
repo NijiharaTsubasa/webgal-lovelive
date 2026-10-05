@@ -18,6 +18,14 @@ const ptBr = {
         system: {
           title: 'Sistema',
           options: {
+            meshCloth: {
+              experimental: 'Recursos experimentais',
+              title: 'Física de tecido',
+              off: 'Desligada',
+              on: 'Ligada',
+              description: 'Pode reduzir a interseção das saias dos personagens Hasunosora, mas aumenta muito o processamento e provavelmente causará engasgos.',
+              titleOnly: 'Volte à tela de título para alterar esta opção.',
+            },
             characterLoading: {
               title: 'Carregamento de personagens',
               options: {

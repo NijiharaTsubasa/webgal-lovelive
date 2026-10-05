@@ -10,3 +10,19 @@
   color: #505050;
   font-size: 120%;
 }
+
+.sectionTitle {
+  margin: 0 3rem 1rem;
+  color: #505050;
+  font-size: 140%;
+}
+
+.clothButtons {
+  display: flex;
+  gap: 1rem;
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

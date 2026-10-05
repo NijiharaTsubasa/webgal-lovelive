@@ -111,6 +111,7 @@ function normalizeUserData(userData: Partial<IUserData>): IUserData {
       ...defaultUserData.optionData,
       ...optionData,
       characterLoadingMode: optionData.characterLoadingMode === 'on-demand' ? 'on-demand' : 'scene',
+      meshClothEnabled: optionData.meshClothEnabled === true,
     },
     appreciationData: {
       ...defaultUserData.appreciationData,

@@ -18,6 +18,14 @@ const de = {
         system: {
           title: 'System',
           options: {
+            meshCloth: {
+              experimental: 'Experimentelle Funktionen',
+              title: 'Stoffphysik',
+              off: 'Aus',
+              on: 'Ein',
+              description: 'Kann Durchdringungen der Röcke von Hasunosora-Figuren reduzieren, erhöht aber den Rechenaufwand stark und kann leicht zu Rucklern führen.',
+              titleOnly: 'Zum Ändern zum Titelbildschirm zurückkehren.',
+            },
             characterLoading: {
               title: 'Figuren laden',
               options: {
