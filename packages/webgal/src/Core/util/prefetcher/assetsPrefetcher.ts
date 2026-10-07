@@ -3,7 +3,7 @@ import { logger } from '../logger';
 
 import { WebGAL } from '@/Core/WebGAL';
 import { fileType } from '@/Core/util/gameAssetsAccess/assetSetter';
-import { isGltfCharacterUrl } from '@/Core/controller/stage/pixi/gltfCharacter';
+import { isGltfCharacterUrl } from '@/Core/Modules/gltf/gltfCharacter';
 
 interface IAssetsPrefetcherOptions {
   /**

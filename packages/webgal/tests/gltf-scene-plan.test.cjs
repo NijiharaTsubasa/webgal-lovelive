@@ -26,7 +26,7 @@ function load(relative, mocks = {}, cache = new Map()) {
   return loaded.exports;
 }
 
-const { planGltfSceneResidency } = load('Core/util/prefetcher/gltfScenePlan.ts');
+const { planGltfSceneResidency } = load('Core/Modules/gltf/gltfScenePlan.ts');
 const { commandType: C } = load('Core/controller/scene/sceneInterface.ts');
 const empty = () => ({figName:'',figNameLeft:'',figNameRight:'',figNameLeft13:'',figNameRight13:'',figNameLeft14:'',figNameRight14:'',freeFigure:[],live2dMotion:[],live2dExpression:[]});
 const sentence = (command, content='', args={}) => ({command,content,args:Object.entries(args).map(([key,value])=>({key,value})),sentenceAssets:[],subScene:[],isLineBreakHolder:false});

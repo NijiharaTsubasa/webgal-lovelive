@@ -21,8 +21,8 @@ import { GifResource } from './GifResource';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import { queryStageObjectReferenceBox, type QueryTargetReferenceBoxResult } from './referenceBox';
 import { assignPixiTransform } from './stageEffectTransform';
-import { createGltfCharacter, type GltfCharacterRuntime } from './gltfCharacter';
-import { takePreparedGltfCharacter } from './gltfSceneResidency';
+import { createGltfCharacter, type GltfCharacterRuntime } from '@/Core/Modules/gltf/gltfCharacter';
+import { takePreparedGltfCharacter } from '@/Core/Modules/gltf/gltfSceneResidency';
 import { GltfCharacterSprite } from './GltfCharacterSprite';
 import { webgalStore } from '@/store/store';
 

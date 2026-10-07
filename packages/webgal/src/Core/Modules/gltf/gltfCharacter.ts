@@ -1,11 +1,10 @@
 import { webgalStore } from '@/store/store';
 import type { OffscreenCharacter } from 'webgal-lovelive-gltf-renderer';
 import type { BlinkParam, FocusParam } from '@/Core/live2DCore';
-import type { GltfPreloadRequest } from '@/Core/util/prefetcher/gltfPrefetchPlan';
+import type { GltfPreloadRequest } from './gltfPrefetchPlan';
 import { fixedGltfResources, resolveFigureConfig } from './fixedGltfResources';
 
 export interface GltfInitialState { motion?: string; expression?: string; focus?: FocusParam }
-const pendingClaims = new Set<Promise<void>>();
 
 /** Package entry points are config.json; ordinary Live2D model.json is unaffected. */
 export function isGltfCharacterUrl(url: string): boolean {
@@ -41,11 +40,6 @@ export async function characterOptions(url: string, width: number, height: numbe
   };
 }
 
-export async function preloadGltfCharacter(url: string, width: number, height: number): Promise<void> {
-  const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-  await OffscreenCharacter.preload(await characterOptions(url, width, height));
-}
-
 export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
   if (!requests.length) return;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
@@ -53,7 +47,7 @@ export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion'
   await OffscreenCharacter.preloadNamed(resourceCatalog.indexUrl, requests, resourceCatalog);
 }
 
-export async function setGltfPreloadRequests(requests: GltfPreloadRequest[], width: number, height: number) {
+export async function setGltfPreloadRequests(requests: GltfPreloadRequest[]) {
   // Named inputs share the fetch cache; GPU preparation belongs to the residency owner.
   const resolved = await Promise.all(requests.map(async request =>
     (await resolveFigureConfig(request.url)).gltf ? request : null));
@@ -65,25 +59,12 @@ export async function setGltfPreloadRequests(requests: GltfPreloadRequest[], wid
 }
 
 export async function createGltfCharacter(url: string, width: number, height: number, initial: GltfInitialState = {}) {
-  let release!: () => void;
-  const claim = new Promise<void>(resolve => { release = resolve; });
-  pendingClaims.add(claim);
-  try {
-    const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
-    const options = { ...await characterOptions(url, width, height),
-      motion: initial.motion ?? '', expression: initial.expression ?? '',
-      ...(initial.focus ? {focus: initial.focus} : {}) };
-    const pending = OffscreenCharacter.takePreloaded(options);
-    pendingClaims.delete(claim);
-    release();
-    const character = (await pending) ?? (await OffscreenCharacter.create(options));
-    // A pooled instance was prepared before this display's stage state was known.
-    if (initial.focus) character.setFocus(initial.focus);
-    return new GltfCharacterRuntime(character, options);
-  } finally {
-    pendingClaims.delete(claim);
-    release();
-  }
+  const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
+  const options = { ...await characterOptions(url, width, height),
+    motion: initial.motion ?? '', expression: initial.expression ?? '',
+    ...(initial.focus ? {focus: initial.focus} : {}) };
+  const character = await OffscreenCharacter.create(options);
+  return new GltfCharacterRuntime(character, options);
 }
 
 /** Owns commands and lifetime independently of the mutable stage-object key. */

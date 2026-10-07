@@ -1,11 +1,11 @@
 import { commandType, IScene } from '@/Core/controller/scene/sceneInterface';
 import { assetsPrefetcher } from '@/Core/util/prefetcher/assetsPrefetcher';
 import { WebGAL } from '@/Core/WebGAL';
-import { setGltfPreloadRequests, preloadGltfNamedResources } from '@/Core/controller/stage/pixi/gltfCharacter';
-import { prewarmGltfPredictions } from '@/Core/controller/stage/pixi/gltfSceneResidency';
+import { setGltfPreloadRequests, preloadGltfNamedResources } from '@/Core/Modules/gltf/gltfCharacter';
+import { prewarmGltfPredictions } from '@/Core/Modules/gltf/gltfSceneResidency';
 import { logger } from '@/Core/util/logger';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
-import { planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans, planGltfBackgroundBatches, type GltfPreloadPlan } from './gltfPrefetchPlan';
+import { planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans, planGltfBackgroundBatches, type GltfPreloadPlan } from '@/Core/Modules/gltf/gltfPrefetchPlan';
 import { scenePrefetcher } from './scenePrefetcher';
 
 let previousScene: IScene | undefined;
@@ -19,7 +19,7 @@ const parsedChoiceScenes = new Map<string, IScene>();
 function applyPlan(plan: GltfPreloadPlan) {
   if (plan.requests.length || hasGltfPlan) {
     hasGltfPlan = plan.requests.length > 0;
-    void setGltfPreloadRequests(plan.requests, WebGAL.stageWidth, WebGAL.stageHeight)
+    void setGltfPreloadRequests(plan.requests)
       .catch(error => logger.warn('glTF 实例预热失败', error));
   }
   if (plan.named.length) {

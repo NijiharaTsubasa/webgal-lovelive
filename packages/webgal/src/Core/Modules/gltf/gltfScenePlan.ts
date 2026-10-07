@@ -1,43 +1,11 @@
-import { commandType, type IScene, type ISentence } from '@/Core/controller/scene/sceneInterface';
+import { commandType, type IScene } from '@/Core/controller/scene/sceneInterface';
 import { type IStageState } from '@/Core/Modules/stage/stageInterface';
 import { getBooleanArgByKey, getStringArgByKey } from '@/Core/util/getSentenceArg';
-import { planGltfPreloads } from './gltfPrefetchPlan';
-import type { GltfPreloadPlan, ProjectedGltfFigure } from './gltfPrefetchPlan';
+import { seedGltfFigures, projectGltfFigure } from './gltfFigureState';
+import type { ProjectedGltfFigure } from './gltfFigureState';
 
 export const gltfFigureIdentity = (key: string, figure: ProjectedGltfFigure) =>
   JSON.stringify([key, figure.url, figure.position, figure.bounds]);
-
-/** Assign lifetimes rather than fixed character colours: a model can occupy another slot later. */
-export function allocateGltfScene(plan: GltfPreloadPlan) {
-  const appearances = new Map<string, { slot: number; key: string; figure: ProjectedGltfFigure }>();
-  let previous = new Map<string, number>();
-  let capacity = 0;
-  for (const batch of plan.batches) {
-    const assigned = new Map<string, number>();
-    const used = new Set<number>();
-    for (const { key, figure } of batch) {
-      const identity = gltfFigureIdentity(key, figure);
-      const slot = previous.get(identity);
-      if (slot !== undefined) { assigned.set(identity, slot); used.add(slot); }
-    }
-    for (const { key, figure } of batch) {
-      const identity = gltfFigureIdentity(key, figure);
-      let slot = assigned.get(identity);
-      if (slot === undefined) {
-        slot = 0;
-        while (used.has(slot)) slot++;
-        assigned.set(identity, slot);
-        used.add(slot);
-      }
-      capacity = Math.max(capacity, slot + 1);
-      // Each actual context receives its own resident actor when a lifetime moves.
-      appearances.set(`${slot}:${identity}`, { slot, key, figure });
-    }
-    previous = assigned;
-  }
-  return { capacity, appearances };
-}
-
 
 export interface GltfSceneAppearance {
   slot: number;
@@ -60,7 +28,7 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState) {
   });
   type Figures = Map<string, ProjectedGltfFigure>;
   interface PathState { line: number; figures: Figures; slots: Map<string, number> }
-  const seed = planGltfPreloads({ ...scene, sentenceList: [] }, 0, state, scene.sceneUrl, 0, undefined, false).projectedFigures;
+  const seed = seedGltfFigures(state);
   const queue: PathState[] = lines.length ? [{ line: 0, figures: seed, slots: new Map() }] : [];
   const visited = new Set<string>();
   const appearances = new Map<string, GltfSceneAppearance>();
@@ -157,14 +125,7 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState) {
           return true;
         });
         if (uncertain) { runtimeGateLines.add(line); unsafeRelease = true; }
-        const projected = planGltfPreloads({ ...scene, sentenceList: [{ ...sentence, args }] }, 0, state, scene.sceneUrl, 1, path.figures, false);
-        for (const [figureKey, figure] of projected.projectedFigures) {
-          const old = path.figures.get(figureKey);
-          if (figure.createdAt === 0 && (!old || gltfFigureIdentity(figureKey, old) !== gltfFigureIdentity(figureKey, figure))) {
-            figure.createdAt = line;
-          }
-        }
-        path.figures = projected.projectedFigures;
+        projectGltfFigure(path.figures, { ...sentence, args }, line);
       }
     }
     // Variable/input statements only affect evaluation at runtime, not static figure discovery.

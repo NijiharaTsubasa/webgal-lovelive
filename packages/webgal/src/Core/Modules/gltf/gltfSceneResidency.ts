@@ -1,11 +1,12 @@
 import type { IScene } from '@/Core/controller/scene/sceneInterface';
-import { FIGURE_POSITIONS, figureStateKeyByPosition, normalizeFigureBounds, type IStageState } from '@/Core/Modules/stage/stageInterface';
+import { type IStageState } from '@/Core/Modules/stage/stageInterface';
 import { WebGAL } from '@/Core/WebGAL';
 import { registerSceneCharacterLoadingHooks, getCharacterLoadingMode } from '@/Core/util/sceneCharacterLoading';
-import type { ProjectedGltfFigure } from '@/Core/util/prefetcher/gltfPrefetchPlan';
-import { planGltfSceneResidency, gltfFigureIdentity } from '@/Core/util/prefetcher/gltfScenePlan';
+import type { ProjectedGltfFigure } from './gltfFigureState';
+import { planGltfSceneResidency, gltfFigureIdentity } from './gltfScenePlan';
 import { characterOptions, GltfCharacterRuntime, preloadGltfNamedResources } from './gltfCharacter';
 import { resolveFigureConfig } from './fixedGltfResources';
+import { seedGltfFigures } from './gltfFigureState';
 import { baseFocusParam } from '@/Core/live2DCore';
 
 type Surface = import('webgal-lovelive-gltf-renderer').CharacterRenderSurface;
@@ -50,15 +51,9 @@ function pastLastUse(owner: Residency, record: Resident) {
     && record.lastUse < WebGAL.sceneManager.sceneData.currentSentenceId - 1;
 }
 function stageFigures(state: IStageState) {
-  const entries = FIGURE_POSITIONS.map(position => ({ key: `fig-${position}`, url: state[figureStateKeyByPosition[position]], position }));
-  entries.push(...state.freeFigure.map(item => ({ key: item.key, url: item.name, position: item.basePosition })));
-  return entries.filter(item => item.url).map(item => ({ key: item.key, figure: {
-    url: item.url, position: item.position,
-    bounds: normalizeFigureBounds(state.live2dMotion.find(value => value.target === item.key)?.overrideBounds),
-    motion: state.live2dMotion.find(value => value.target === item.key)?.motion ?? '',
-    expression: state.live2dExpression.find(value => value.target === item.key)?.expression ?? '', createdAt: -1,
-    focus: { ...baseFocusParam, ...state.live2dFocus.find(value => value.target === item.key)?.focus },
-  } as ProjectedGltfFigure }));
+  return [...seedGltfFigures(state)].filter(([, figure]) => figure.url).map(([key, figure]) => ({ key, figure: {
+    ...figure, focus: { ...baseFocusParam, ...state.live2dFocus.find(value => value.target === key)?.focus },
+  } }));
 }
 async function addResident(owner: Residency, slot: number, key: string, figure: ProjectedGltfFigure, signal: AbortSignal) {
   const { OffscreenCharacter, CharacterRenderSurface } = await import('webgal-lovelive-gltf-renderer');

@@ -13,10 +13,10 @@ import { getAnimateDuration, getExitAnimation } from '@/Core/Modules/animationFu
 import { logger } from '@/Core/util/logger';
 import { setEbg } from '@/Core/gameScripts/changeBg/setEbg';
 import { applyTransformToPixiContainer } from '@/Core/controller/stage/pixi/stageEffectTransform';
-import { isGltfCharacterUrl } from './gltfCharacter';
-import { resolveFigureConfig } from './fixedGltfResources';
+import { isGltfCharacterUrl } from '@/Core/Modules/gltf/gltfCharacter';
+import { resolveFigureConfig } from '@/Core/Modules/gltf/fixedGltfResources';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
-import { hasPreparedGltfCharacter } from './gltfSceneResidency';
+import { hasPreparedGltfCharacter } from '@/Core/Modules/gltf/gltfSceneResidency';
 
 interface ISyncFigureSlotPayload {
   key: string;

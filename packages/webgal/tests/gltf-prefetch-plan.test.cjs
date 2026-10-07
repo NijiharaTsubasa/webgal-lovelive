@@ -27,7 +27,7 @@ function load(relative, mocks = {}, cache = new Map()) {
   return loaded.exports;
 }
 
-const {planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans} = load('Core/util/prefetcher/gltfPrefetchPlan.ts');
+const {planGltfPreloads, planGltfChoiceBranch, planGltfSceneTransition, mergeGltfBranchPlans} = load('Core/Modules/gltf/gltfPrefetchPlan.ts');
 const {commandType: C} = load('Core/controller/scene/sceneInterface.ts');
 const empty = () => ({figName:'',figNameLeft:'',figNameRight:'',figNameLeft13:'',figNameRight13:'',
   figNameLeft14:'',figNameRight14:'',freeFigure:[],live2dMotion:[],live2dExpression:[]});
@@ -74,6 +74,11 @@ test('same identity preserves absent commands and bounds; explicit bounds and fr
   const preserved=plan([figure('a',{next:true}),say()],state);
   assert.equal(preserved.requests.length,0);
   assert.deepEqual(preserved.named,[{kind:'motion',name:'keep'},{kind:'expression',name:'face'}]);
+  const emptyMotion=plan([figure('a',{motion:'',next:true}),say()],state);
+  assert.equal(emptyMotion.projectedFigures.get('fig-center').motion,'keep');
+  const skin=plan([figure('a',{skin:'alternate',next:true}),say()],state);
+  assert.equal(skin.projectedFigures.get('fig-center').motion,'');
+  assert.equal(skin.projectedFigures.get('fig-center').expression,'face');
   assert.equal(plan([figure('a',{bounds:'0,0,0,0',next:true}),say()],state).requests.length,1);
   const sameBounds=plan([figure('a',{bounds:'1,2,3,4',next:true}),say()],state);
   assert.equal(sameBounds.requests.length,0);
@@ -186,7 +191,7 @@ test('late choice scene fetch cannot overwrite a newer plan, and rejected fetch 
   const mocks={
     '@/Core/WebGAL':{WebGAL:{stageWidth:800,stageHeight:600}},
     '@/Core/Modules/stage/stageStateManager':{stageStateManager:{getViewStageState:()=>state}},
-    '@/Core/controller/stage/pixi/gltfCharacter':{setGltfPreloadRequests:async r=>{calls.push(r)},preloadGltfNamedResources:async()=>{}},
+    '@/Core/Modules/gltf/gltfCharacter':{setGltfPreloadRequests:async r=>{calls.push(r)},preloadGltfNamedResources:async()=>{}},
     '@/Core/util/logger':{logger:{warn:()=>{}}},
     '@/Core/util/prefetcher/assetsPrefetcher':{assetsPrefetcher:()=>{}},
     './scenePrefetcher':{scenePrefetcher:()=>{}},
@@ -238,7 +243,7 @@ test('transition fetches deduplicate, publish bounded first batch, survive progr
   const mocks={
     '@/Core/WebGAL':{WebGAL:{stageWidth:800,stageHeight:600}},
     '@/Core/Modules/stage/stageStateManager':{stageStateManager:{getViewStageState:()=>state}},
-    '@/Core/controller/stage/pixi/gltfCharacter':{setGltfPreloadRequests:async r=>{calls.push(r)},preloadGltfNamedResources:async()=>{}},
+    '@/Core/Modules/gltf/gltfCharacter':{setGltfPreloadRequests:async r=>{calls.push(r)},preloadGltfNamedResources:async()=>{}},
     '@/Core/util/logger':{logger:{warn:()=>{}}},
     '@/Core/util/prefetcher/assetsPrefetcher':{assetsPrefetcher:()=>{}},
     './scenePrefetcher':{scenePrefetcher:()=>{}},
@@ -265,8 +270,8 @@ test('progress warms only the next new group while retaining named fetch lookahe
   const mocks={
     '@/Core/WebGAL':{WebGAL:{stageWidth:800,stageHeight:600}},
     '@/Core/Modules/stage/stageStateManager':{stageStateManager:{getViewStageState:empty}},
-    '@/Core/controller/stage/pixi/gltfCharacter':{setGltfPreloadRequests:async r=>fetched.push(r),preloadGltfNamedResources:async()=>{}},
-    '@/Core/controller/stage/pixi/gltfSceneResidency':{prewarmGltfPredictions:async batches=>warmed.push(batches)},
+    '@/Core/Modules/gltf/gltfCharacter':{setGltfPreloadRequests:async r=>fetched.push(r),preloadGltfNamedResources:async()=>{}},
+    '@/Core/Modules/gltf/gltfSceneResidency':{prewarmGltfPredictions:async batches=>warmed.push(batches)},
     '@/Core/util/logger':{logger:{warn:()=>{}}},
     '@/Core/util/prefetcher/assetsPrefetcher':{assetsPrefetcher:()=>{}},
     './scenePrefetcher':{scenePrefetcher:()=>{}},
@@ -277,7 +282,7 @@ test('progress warms only the next new group while retaining named fetch lookahe
   assert.equal(fetched[0].length,3,'lightweight fetching can look farther than GPU preparation');
 });
 test('GPU choice lookahead includes at most the first new group of each of two branches', () => {
-  const {planGltfBackgroundBatches}=load('Core/util/prefetcher/gltfPrefetchPlan.ts');
+  const {planGltfBackgroundBatches}=load('Core/Modules/gltf/gltfPrefetchPlan.ts');
   const state=empty(), base=plan([sentence(C.choose,'A:a.txt|B:b.txt')]);
   const branches=['a','b'].map((name,index)=>planGltfChoiceBranch(base,index,{sceneUrl:name+'.txt',sentenceList:[say(),figure(name),say(),figure('far'),say()]},state,'visit'));
   assert.deepEqual(planGltfBackgroundBatches(base,branches).map(batch=>batch.map(item=>item.figure.url)),[['game/a/config.json'],['game/b/config.json']]);

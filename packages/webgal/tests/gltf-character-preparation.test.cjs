@@ -6,7 +6,7 @@ const test = require('node:test');
 const ts = require('typescript');
 
 function load(OffscreenCharacter = {}, resolveFigure = async url=>({url:new URL(url,document.baseURI).href,gltf:true}), meshClothEnabled = false) {
-  const filename=path.resolve(__dirname,'../src/Core/controller/stage/pixi/gltfCharacter.ts');
+  const filename=path.resolve(__dirname,'../src/Core/Modules/gltf/gltfCharacter.ts');
   const loaded=new Module(filename,module);
   loaded.paths=Module._nodeModulePaths(path.dirname(filename));
   const catalog={indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog};
@@ -29,20 +29,19 @@ test('progress lookahead only fetches glTF inputs and never allocates speculativ
   const api=load({preloadNamed:async(index,requests)=>calls.push(requests),
     setPreloadRequests(){throw Error('unexpected GPU allocation');}},
     async url=>({url,gltf:!url.includes('live')}));
-  await api.setGltfPreloadRequests([{...request('live'),url:'game/live/config.json'}],100,100);
+  await api.setGltfPreloadRequests([{...request('live'),url:'game/live/config.json'}]);
   assert.deepEqual(calls,[]);
-  await api.setGltfPreloadRequests([request('next')],100,100);
+  await api.setGltfPreloadRequests([request('next')]);
   assert.deepEqual(calls,[[{kind:'motion',name:'motion'},{kind:'expression',name:'face'}]]);
 });
 
-test('preload and direct display disable mesh cloth while preserving bone physics', async t=>{
+test('residency options and direct display disable mesh cloth while preserving bone physics', async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});
   const options=[];
-  const api=load({preload(o){options.push(o);},
-    takePreloaded(o){options.push(o);return null;},create(o){options.push(o);return {};}});
-  await api.preloadGltfCharacter('game/a/config.json',1920,1440);
+  const api=load({create(o){options.push(o);return {};}});
+  options.push(await api.characterOptions('game/a/config.json',1920,1440));
   await api.createGltfCharacter('game/a/config.json',1920,1440);
-  assert.equal(options.length,3);
+  assert.equal(options.length,2);
   for(const o of options){assert.equal(o.meshClothEnabled,false);assert.notEqual(o.physicsEnabled,false);}
 });
 
@@ -105,25 +104,27 @@ test('Focus commands are independent, copied, deduplicated and retained through 
 test('direct creation supplies Focus to the initial renderer options',async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});
   let supplied;
-  const api=load({takePreloaded:()=>null,create:o=>{supplied=o;return {setFocus(){}};}});
+  const api=load({create:o=>{supplied=o;return {setFocus(){}};}});
   await api.createGltfCharacter('game/a/config.json',100,100,{focus:{x:.75,y:.2,instant:true}});
   assert.deepEqual(supplied.focus,{x:.75,y:.2,instant:true});
 });
 
-test('a claimed pooled actor receives the latest Focus rather than retaining its warmup state',async t=>{
+test('direct creation uses the initial Focus without replaying the renderer command',async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});
   const calls=[],actor={setFocus:value=>calls.push({...value})};
-  const api=load({takePreloaded:()=>actor,create:()=>{throw Error('should reuse');}});
+  let supplied;
+  const api=load({create:options=>{supplied=options;return actor;}});
   await api.createGltfCharacter('game/a/config.json',100,100,{focus:{x:-.75,y:0,instant:true}});
-  assert.deepEqual(calls,[{x:-.75,y:0,instant:true}]);
+  assert.deepEqual(supplied.focus,{x:-.75,y:0,instant:true});
+  assert.deepEqual(calls,[]);
 });
 
 
-test('experimental mesh cloth setting reaches direct and preloaded actors without disabling bone physics', async t=>{
+test('experimental mesh cloth setting reaches residency options and direct actors without disabling bone physics', async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});
   const options=[];
-  const api=load({preload:o=>options.push(o),takePreloaded:o=>{options.push(o);return null;},create:o=>{options.push(o);return {}; }},async url=>({url,gltf:true}),true);
-  await api.preloadGltfCharacter('game/a/config.json',1920,1080);
+  const api=load({create:o=>{options.push(o);return {}; }},async url=>({url,gltf:true}),true);
+  options.push(await api.characterOptions('game/a/config.json',1920,1080));
   await api.createGltfCharacter('game/a/config.json',1920,1080);
   for(const o of options){assert.equal(o.meshClothEnabled,true);assert.notEqual(o.physicsEnabled,false);}
 });

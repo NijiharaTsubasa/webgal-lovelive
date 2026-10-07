@@ -1,26 +1,14 @@
 import { commandType, type IScene, type ISentence } from '@/Core/controller/scene/sceneInterface';
-import {
-  FIGURE_POSITIONS, figureStateKeyByPosition, normalizeFigureBounds,
-  type IFigurePosition, type IStageState,
-} from '@/Core/Modules/stage/stageInterface';
-import { getBooleanArgByKey, getFigurePositionFromArgs, getStringArgByKey } from '@/Core/util/getSentenceArg';
-import type { FocusParam } from '@/Core/live2DCore';
+import type { IStageState } from '@/Core/Modules/stage/stageInterface';
+import { getBooleanArgByKey, getStringArgByKey } from '@/Core/util/getSentenceArg';
+import { seedGltfFigures, projectGltfFigure, type ProjectedGltfFigure } from './gltfFigureState';
+export type { ProjectedGltfFigure } from './gltfFigureState';
 
 export interface GltfPreloadRequest {
   url: string;
   motion: string;
   expression: string;
   preloadId: string;
-}
-
-export interface ProjectedGltfFigure {
-  url: string;
-  position: IFigurePosition;
-  bounds: [number, number, number, number];
-  motion: string;
-  expression: string;
-  createdAt: number;
-  focus?: FocusParam;
 }
 
 type Figure = ProjectedGltfFigure;
@@ -70,15 +58,7 @@ const boundaries = new Set([
 /** Predict only deterministic, committed figure states; never execute speculative scripts. */
 export function planGltfPreloads(scene: IScene, start: number, state: IStageState, visit: string, limit = 20,
   projected?: Map<string, Figure>, allowChoice = true, firstBatchOnly = false) {
-  const figures = new Map<string, Figure>();
-  const seed = (key: string, url: string, position: IFigurePosition) => {
-    const motion = state.live2dMotion.find(item => item.target === key);
-    figures.set(key, { url, position, bounds: normalizeFigureBounds(motion?.overrideBounds),
-      motion: motion?.motion ?? '', expression: state.live2dExpression.find(item => item.target === key)?.expression ?? '',
-      createdAt: -1 });
-  };
-  for (const position of FIGURE_POSITIONS) seed(`fig-${position}`, state[figureStateKeyByPosition[position]], position);
-  for (const figure of state.freeFigure) seed(figure.key, figure.name, figure.basePosition);
+  const figures = seedGltfFigures(state);
   if (projected) {
     figures.clear();
     for (const [key, figure] of projected) figures.set(key, { ...figure });
@@ -138,26 +118,7 @@ export function planGltfPreloads(scene: IScene, start: number, state: IStageStat
     }
     if (boundaries.has(sentence.command)) break;
     sentences.push(sentence);
-    if (sentence.command === commandType.changeFigure) {
-      const url = getBooleanArgByKey(sentence, 'clear') || sentence.content === 'none' ? '' : sentence.content;
-      const id = getStringArgByKey(sentence, 'id') ?? '';
-      const position = getFigurePositionFromArgs(sentence) || 'center';
-      const key = id || `fig-${position}`;
-      const motion = getStringArgByKey(sentence, 'motion') ?? '';
-      const expression = getStringArgByKey(sentence, 'expression') ?? '';
-      const rawBounds = getStringArgByKey(sentence, 'bounds') ?? '';
-      if ([url, id, motion, expression, rawBounds].some(unresolved)) break;
-      const parsedBounds = rawBounds.split(',').map(Number);
-      const bounds = rawBounds && parsedBounds.length === 4 && parsedBounds.every(value => !Number.isNaN(value))
-        ? parsedBounds as [number, number, number, number] : undefined;
-      const old = figures.get(key);
-      const changed = !old || old.url !== url || old.position !== position
-        || (!!rawBounds && JSON.stringify(normalizeFigureBounds(bounds)) !== JSON.stringify(old.bounds));
-      figures.set(key, changed
-        ? { url, position, bounds: normalizeFigureBounds(bounds), motion, expression, createdAt: i }
-        : { ...old, motion: motion || bounds || getStringArgByKey(sentence, 'skin') ? motion : old.motion,
-          expression: expression || old.expression, bounds: bounds ?? old.bounds });
-    }
+    if (sentence.command === commandType.changeFigure && !projectGltfFigure(figures, sentence, i)) break;
     if (getBooleanArgByKey(sentence, 'next')) continue;
     collectCommittedFigures();
     if (firstBatchOnly && requests.length) break;

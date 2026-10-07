@@ -64,7 +64,7 @@ function fixture() {
     }
     return {sceneUrl:url,sentenceList:lines};
   };
-  const api = moduleFrom('Core/controller/stage/pixi/gltfSceneResidency.ts', {
+  const api = moduleFrom('Core/Modules/gltf/gltfSceneResidency.ts', {
     '@/Core/Modules/stage/stageInterface': {
       FIGURE_POSITIONS: ['left','center','right'],
       figureStateKeyByPosition: {left:'figureLeft', center:'figureCenter', right:'figureRight'},
@@ -218,7 +218,7 @@ test('failed new-slot preparation releases its empty context and preserves the o
 });
 
 test('real reused runtime revives before awaiting async motion and includes commands arriving during prepare', async () => {
-  const {GltfCharacterRuntime} = moduleFrom('Core/controller/stage/pixi/gltfCharacter.ts', {'./fixedGltfResources':{}, '@/store/store':{webgalStore:{getState:()=>({userData:{optionData:{meshClothEnabled:false}}})}}});
+  const {GltfCharacterRuntime} = moduleFrom('Core/Modules/gltf/gltfCharacter.ts', {'./fixedGltfResources':{}, '@/store/store':{webgalStore:{getState:()=>({userData:{optionData:{meshClothEnabled:false}}})}}});
   let resolveMotion, prepared = 0, released = 0;
   const applied = [];
   const actor = {

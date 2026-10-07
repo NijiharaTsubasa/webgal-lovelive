@@ -4,7 +4,7 @@ const path=require('node:path');
 const Module=require('node:module');
 const test=require('node:test');
 const ts=require('typescript');
-const filename=path.resolve(__dirname,'../src/Core/controller/stage/pixi/fixedGltfResources.ts');
+const filename=path.resolve(__dirname,'../src/Core/Modules/gltf/fixedGltfResources.ts');
 const loaded=new Module(filename,module);
 loaded._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021},
