@@ -1,9 +1,9 @@
 {
-  "name": "WebGAL MyGO Engine",
-  "short_name": "WebGAL MyGO",
+  "name": "WebGAL LoveLive Engine",
+  "short_name": "WebGAL LoveLive",
   "start_url": ".",
   "display": "fullscreen",
-  "description": "WebGAL MyGO Demo",
+  "description": "WebGAL LoveLive Demo",
   "dir": "auto",
   "orientation": "landscape",
   "icons": [

@@ -2,10 +2,10 @@
   "schemaVersion": "1.0.0",
   "id": "webgal-lovelive.lovelive",
   "name": "WebGAL LoveLive",
-  "version": "3.2.1",
+  "version": "0.1.0-beta.1",
   "type": "custom",
   "webgalVersion": "4.6.4",
-  "description": "LoveLive专版引擎（Fork自MyGO!!!!!专版引擎）",
+  "description": "LoveLive 专版引擎；基于 MyGO v3.2.1",
   "descriptions": {
     "en": "A web Visual Novel engine made exclusively for LoveLive and MyGO",
     "ja": "ラブライブ・バンドリ専用のウェブビジュアルノベルエンジン"
@@ -16,5 +16,6 @@
   "urls": {
     "repository": "https://github.com/NijiharaTsubasa/webgal-lovelive",
     "bugs": "https://github.com/NijiharaTsubasa/webgal-lovelive/issues"
-  }
+  },
+  "live2dSupport": true
 }

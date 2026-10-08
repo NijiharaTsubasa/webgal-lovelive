@@ -2,6 +2,7 @@ import useTrans from '@/hooks/useTrans';
 import { Left } from '@icon-park/react';
 import s from './about.module.scss';
 import { __INFO } from '@/config/info';
+import { config } from '@/config/mygo';
 
 export default function About(props: { onClose: () => void }) {
   const t = useTrans('menu.options.pages.system.options.about.');
@@ -12,7 +13,9 @@ export default function About(props: { onClose: () => void }) {
       </div>
       <div className={s.title}>{t('subTitle')}</div>
       <div className={s.title}>{t('version')}</div>
-      <div className={s.text}>{__INFO.version}</div>
+      <div className={s.text}>WebGAL LoveLive v{config.loveliveVersion}</div>
+      <div className={s.text}>WebGAL MyGO v{config.version}</div>
+      <div className={s.text}>WebGAL v{__INFO.version}</div>
       <div className={s.title}>{t('source')}</div>
       <div className={s.text}>
         <a target="_blank" href="https://github.com/OpenWebGAL/WebGAL" rel="noreferrer">

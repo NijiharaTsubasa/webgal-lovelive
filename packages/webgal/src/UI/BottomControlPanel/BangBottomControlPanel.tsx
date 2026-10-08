@@ -277,7 +277,7 @@ export function BangBottomControlPanel() {
         }}
         style={{ opacity: showVersion.value ? 1 : 0 }}
       >
-        <div>WebGAL MyGO Engine v{config.version}</div>
+        <div>WebGAL LoveLive v{config.loveliveVersion} MyGO v{config.version}</div>
         <div>( Based on WebGAL v{__INFO.version} )</div>
       </div>
     </div>
