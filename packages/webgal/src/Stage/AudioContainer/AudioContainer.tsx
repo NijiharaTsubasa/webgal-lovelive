@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { logger } from '@/Core/util/logger';
 import { useStageState } from '@/hooks/useStageState';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
+import { LoopingBgm } from './LoopingBgm';
 
 export const AudioContainer = () => {
   const stageStore = useStageState();
@@ -122,13 +123,7 @@ export const AudioContainer = () => {
 
   return (
     <div>
-      <audio
-        key={isShowTitle.toString() + titleBgm}
-        id="currentBgm"
-        src={isShowTitle ? titleBgm : stageStore.bgm.src}
-        loop={true}
-        autoPlay={isEnterGame}
-      />
+      <LoopingBgm key={isShowTitle.toString() + titleBgm} src={isShowTitle ? titleBgm : stageStore.bgm.src} />
       <audio key={stageStore.playVocal} id="currentVocal" src={stageStore.playVocal} />
     </div>
   );
