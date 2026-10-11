@@ -193,7 +193,6 @@ export class FixedGltfResources {
     }
     for (const adapter of this.entries.filter(e => e.type === 'garupa-expression-adapter'
       && e.motionGroup === model.component!.motionGroup)) await this.preload(adapter.type, adapter.name);
-    if (model.component!.defaultMotion) await this.resolveMotion(model.component!.defaultMotion, { optional: true });
   }
 }
 

@@ -27,6 +27,18 @@ function fixture(files){
   };
   return {catalog:new FixedGltfResources(base,fetcher),calls,fetcher};
 }
+
+test('model dependency preparation does not request the default motion', async () => {
+  const json = Buffer.from(JSON.stringify({ materials: [] }));
+  const glb = Buffer.alloc(20 + json.length);
+  glb.writeUInt32LE(0x46546c67, 0);
+  glb.writeUInt32LE(json.length, 12);
+  json.copy(glb, 20);
+  const { catalog, calls } = fixture(new Map([[url('figure/a/model.glb'), new Response(glb)]]));
+  await catalog.preloadModelDependencies({ config: url('figure/a/config.json'), name: 'a',
+    component: { model: 'model.glb', defaultMotion: 'missing.motionbin' } });
+  assert.deepEqual(calls, [url('figure/a/model.glb')]);
+});
 test('default browser fetch retains the global receiver during warmup and resource loading',async t=>{
   const originalFetch=globalThis.fetch;
   const calls=[];
