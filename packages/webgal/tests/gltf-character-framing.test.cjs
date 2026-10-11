@@ -16,7 +16,9 @@ test('residency options and direct display share portrait framing and canvas foo
   };
   const loaded = new Module(filename, module);
   loaded.paths = Module._nodeModulePaths(path.dirname(filename));
-  const catalog = {indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog};
+  let component = {group:'llas',name:'ch0109_co0002_member'};
+  const catalog = {indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog,
+    model:async()=>({component})};
   loaded.require = name => name === '@/store/store' ? {webgalStore:{getState:()=>({userData:{optionData:{meshClothEnabled:false}}})}} : name === 'webgal-lovelive-gltf-renderer'
     ? { OffscreenCharacter } : name === './fixedGltfResources'
       ? {fixedGltfResources:()=>catalog,resolveFigureConfig:async url=>({url:new URL(url,document.baseURI).href,gltf:true})}
@@ -34,5 +36,20 @@ test('residency options and direct display share portrait framing and canvas foo
     assert.equal(calls[0].framing.viewHeight, 1.36 / 1.18);
     assert.equal(calls[0].framing.centerY, 1.195);
     assert.equal(calls[0].framing.groupOffsets.llas, (50 / 1800) * (1.36 / 1.18));
+    component = {group:'yohane',name:'CH_yohane_normal01'};
+    const yohane = await api.characterOptions('game/3d/figure/yohane/config.json',2560,1440);
+    assert.equal(yohane.framing.viewHeight, 1.36 / 1.18);
+    assert.equal(yohane.framing.centerY, 1.16);
+    component = {group:'yohane',name:'CH_ruby_fairy01'};
+    const ruby = await api.characterOptions('game/3d/figure/ruby/config.json',2560,1440);
+    assert.equal(ruby.framing.viewHeight, yohane.framing.viewHeight);
+    assert.equal(ruby.framing.centerY, 1.06);
+    // Costume changes keep one character's framing; asset folder names do not select it.
+    component = {group:'yohane',name:'CH_ruby_swimsuit01'};
+    const swimsuit = await api.characterOptions('renamed/config.json',2560,1440);
+    assert.deepEqual(swimsuit.framing,ruby.framing);
+    component = {group:'hasunosora',name:'3d_costume_1001101201'};
+    const kaho = await api.characterOptions('other/config.json',2560,1440);
+    assert.deepEqual(kaho.framing,calls[0].framing);
   } finally { global.document = previous; }
 });

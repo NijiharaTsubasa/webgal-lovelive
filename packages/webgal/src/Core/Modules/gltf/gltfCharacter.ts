@@ -17,6 +17,8 @@ export async function characterOptions(url: string, width: number, height: numbe
   const resolved = await resolveFigureConfig(url);
   if (!resolved.gltf) throw Error(`${resolved.url}: not a glTF model`);
   const resourceCatalog = await fixedGltfResources().load();
+  const { component } = await resourceCatalog.model(resolved.url);
+  const yohane = component.group === 'yohane';
   return {
     modelUrl: resolved.url,
     indexUrl: resourceCatalog.indexUrl,
@@ -32,8 +34,9 @@ export async function characterOptions(url: string, width: number, height: numbe
     height,
     // Match the native portrait's head-to-hip composition, not a full-body thumbnail.
     framing: {
+      // Ruby's fairy proportions need a higher crop, shared by her costumes.
       viewHeight: 1.36 / 1.18,
-      centerY: 1.195,
+      centerY: yohane ? (component.name.startsWith('CH_ruby_') ? 1.06 : 1.16) : 1.195,
       // Portrait composition: 50 stage units down at 1440px and M_3_1_0's 1.25 fit.
       groupOffsets: { llas: (50 / (1440 * 1.25)) * (1.36 / 1.18) },
     },

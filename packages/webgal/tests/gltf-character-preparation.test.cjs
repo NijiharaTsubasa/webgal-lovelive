@@ -11,6 +11,7 @@ function load(OffscreenCharacter = {}, resolveFigure = async url=>({url:new URL(
   loaded.paths=Module._nodeModulePaths(path.dirname(filename));
   const ready=new Set();
   const catalog={indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog,
+    model:async()=>({component:{name:'actor',group:'llas'}}),
     isNamedReady:(kind,name)=>ready.has(`${kind}:${name}`),markNamedReady:(kind,name)=>ready.add(`${kind}:${name}`)};
   loaded.require=name=>name==='@/store/store'?{webgalStore:{getState:()=>({userData:{optionData:{meshClothEnabled}}})}}:name==='webgal-lovelive-gltf-renderer'?{OffscreenCharacter}:name==='./fixedGltfResources'
     ?{fixedGltfResources:()=>catalog,resolveFigureConfig:resolveFigure}
