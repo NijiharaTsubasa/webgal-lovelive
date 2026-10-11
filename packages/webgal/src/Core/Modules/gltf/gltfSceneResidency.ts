@@ -11,7 +11,7 @@ import { baseFocusParam } from '@/Core/live2DCore';
 
 type Surface = import('webgal-lovelive-gltf-renderer').CharacterRenderSurface;
 interface Resident { identity: string; runtime: GltfCharacterRuntime; actor: import('webgal-lovelive-gltf-renderer').OffscreenCharacter; slot: number; lastUse: number; warmedMotion?: string; warmedExpression?: string; backgroundReady?: boolean }
-interface Residency { surfaces: Surface[]; residents: Resident[]; active: Set<Resident>; retired: boolean; mode: string; sceneUrl?: string }
+interface Residency { surfaces: Surface[]; residents: Resident[]; active: Set<Resident>; retired: boolean; mode: string; sceneUrl?: string; slotSchedule?: Map<number, Map<string, number | undefined>> }
 let current: Residency | undefined;
 const retired = new Set<Residency>();
 const prepared = new Map<string, Resident>();
@@ -74,6 +74,21 @@ function pastLastUse(owner: Residency, record: Resident) {
   return !!owner.sceneUrl && owner.sceneUrl === WebGAL.sceneManager?.sceneData.currentScene.sceneUrl
     && record.lastUse < WebGAL.sceneManager.sceneData.currentSentenceId - 1;
 }
+function plannedSlot(owner: Residency, identity: string) {
+  if (!owner.sceneUrl || owner.sceneUrl !== WebGAL.sceneManager?.sceneData.currentScene.sceneUrl) return;
+  const cursor = WebGAL.sceneManager.sceneData.currentSentenceId - 1;
+  let lastLine = -Infinity, slots: Map<string, number | undefined> | undefined;
+  for (const [line, schedule] of owner.slotSchedule ?? []) if (line <= cursor && line > lastLine) {
+    lastLine = line; slots = schedule;
+  }
+  return slots?.get(identity);
+}
+function preferPlannedSlot(owner: Residency, identity: string, candidates: Resident[]) {
+  // A returning identity can have several preheated copies. Keep the planned
+  // layout so its next neighbour does not collide with an unnecessarily chosen copy.
+  const slot = plannedSlot(owner, identity);
+  return candidates.sort((a, b) => Number(b.slot === slot) - Number(a.slot === slot));
+}
 function stageFigures(state: IStageState) {
   return [...seedGltfFigures(state)].filter(([, figure]) => figure.url).map(([key, figure]) => ({ key, figure: {
     ...figure, focus: { ...baseFocusParam, ...state.live2dFocus.find(value => value.target === key)?.focus },
@@ -102,7 +117,7 @@ async function addResident(owner: Residency, slot: number, key: string, figure: 
 
 async function prepareScene(scene: IScene, state: IStageState, signal: AbortSignal, startLine = 0) {
   const plan = planGltfSceneResidency(scene, state, startLine);
-  const owner: Residency = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'scene', sceneUrl: scene.sceneUrl };
+  const owner: Residency = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'scene', sceneUrl: scene.sceneUrl, slotSchedule: plan.slotSchedule };
   try {
     await preloadGltfNamedResources(plan.named);
     for (const { slot, key, figure, lastUse } of plan.appearances.values()) {
@@ -136,6 +151,7 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
   const originals = new Map(owner.residents.map(record => [record, record.lastUse]));
   const originalSurfaces = new Set(owner.surfaces);
   const originalUrl = owner.sceneUrl;
+  const originalSchedule = owner.slotSchedule;
   const lastUses = new Map<Resident, number>();
   const slotMapping = new Map<number, number>(), used = new Set<number>();
   // Rebind plan slots to existing contexts, preferring the currently displayed actor.
@@ -184,12 +200,14 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
     if (!tryPrepareStage(state, signal) && !await prepareDisplayedStage(state, signal)) await prepareStage(state, signal);
     assertCurrent(signal);
     owner.sceneUrl = scene.sceneUrl;
+    owner.slotSchedule = new Map([...plan.slotSchedule].map(([line, slots]) => [line,
+      new Map([...slots].map(([identity, slot]) => [identity, slot === undefined ? undefined : slotMapping.get(slot)]))]));
     for (const record of [...owner.residents]) {
       record.lastUse = lastUses.get(record) ?? line - 1;
       if (!lastUses.has(record) && !owner.active.has(record) && prepared.get(record.identity) !== record) releaseResident(owner, record);
     }
   } catch (error) {
-    prepared.clear(); owner.sceneUrl = originalUrl;
+    prepared.clear(); owner.sceneUrl = originalUrl; owner.slotSchedule = originalSchedule;
     for (const record of [...owner.residents]) {
       if (originals.has(record)) record.lastUse = originals.get(record)!;
       else releaseResident(owner, record);
@@ -229,8 +247,8 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
     if (record) { reserved.set(key, record); used.add(record.slot); }
   }
   const candidatesByKey = new Map(targets.filter(item => !reserved.has(item.key)).map(({ key, figure }) =>
-    [key, owner.residents.filter(record => record.identity === gltfFigureIdentity(key, figure)
-      && !owner.active.has(record) && !used.has(record.slot))]));
+    [key, preferPlannedSlot(owner, gltfFigureIdentity(key, figure), owner.residents.filter(record => record.identity === gltfFigureIdentity(key, figure)
+      && !owner.active.has(record) && !used.has(record.slot)))]));
   const matched = new Map<string, Resident>();
   const slotKeys = new Map<number, string>();
   const match = (key: string, visited: Set<number>): boolean => {
@@ -329,10 +347,15 @@ function tryPrepareStage(state: IStageState, signal: AbortSignal) {
   for (const {key, figure} of targets) {
     const identity = gltfFigureIdentity(key, figure);
     const displayed = WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime;
-    const record = owner.residents.find(item => item.identity === identity && !used.has(item.slot)
-      && (owner.active.has(item) ? item.runtime === displayed
-        : item.backgroundReady && item.warmedMotion === figure.motion && item.warmedExpression === figure.expression));
+    const active = owner.residents.find(item => item.identity === identity && owner.active.has(item)
+      && item.runtime === displayed && !used.has(item.slot));
+    const slot = active ? undefined : plannedSlot(owner, identity);
+    const record = active ?? preferPlannedSlot(owner, identity, owner.residents.filter(item => item.identity === identity
+      && !owner.active.has(item) && !used.has(item.slot))).find(item => item.slot === slot
+      || item.backgroundReady && item.warmedMotion === figure.motion && item.warmedExpression === figure.expression);
     if (!record || !record.runtime.isReady) return false;
+    if (!owner.active.has(record) && (!record.backgroundReady || record.warmedMotion !== figure.motion
+        || record.warmedExpression !== figure.expression)) return false;
     if (!record.runtime.isReadyFor(figure.motion, figure.expression)
         && !areGltfNamedResourcesReady(namedInputs(figure))) return false;
     used.add(record.slot);

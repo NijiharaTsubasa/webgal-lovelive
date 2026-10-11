@@ -408,6 +408,29 @@ test('matching selects the alternate resident slot instead of constructing a dup
   assert.equal(f.actors.length,3,'reuse an alternative resident instead of allocating a fourth');
 });
 
+test('re-entry follows the planned spare slot despite a different free-figure order, preserving the next active actor', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const show = (key, url) => f.sentence(f.C.changeFigure, url, {id:key,next:true});
+  const pause = () => f.sentence(f.C.say, 'pause');
+  f.setPlan({sentenceList:[show('a',a),show('b',b),pause(),show('a',''),show('c',c),pause(),
+    show('b',''),show('a',a),pause(),show('a',''),show('c',''),pause(),
+    show('a',a),show('c',c),pause(),show('c',''),show('b',b),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const creations=f.actors.length;
+  f.sceneData.currentSentenceId=15;
+  assert.equal(f.hooks.tryPrepareStage(f.state([['c',c],['a',a]]),f.signal()),true);
+  const cRuntime=f.take('c',c), aRuntime=f.take('a',a);
+  assert.equal(aRuntime.actor.surface,f.surfaces[0], 'script slot wins over incidental free-figure list order');
+  cRuntime.dispose(); f.displayed.delete('c');
+  f.sceneData.currentSentenceId=18;
+  await f.hooks.prepareStage(f.state([['a',a],['b',b]]),f.signal());
+  assert.equal(f.actors.length,creations, 'the later character reuses its preheated actor');
+  assert.equal(f.displayed.get('a').gltfRuntime,aRuntime, 'unchanged actors retain their animation and physics state');
+  assert.equal(aRuntime.isActive,true);
+  f.take('b',b);
+  assert.equal(f.surfaces.length,2, 'the original context-sharing budget is retained');
+});
+
 test('releaseScene drops inactive preloads immediately and retains an active context only until exit', async () => {
   const f=fixture();
   const figure=url=>({url,position:'center',bounds:[0,0,1,1],motion:'',expression:''});

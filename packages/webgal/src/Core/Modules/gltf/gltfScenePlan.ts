@@ -35,6 +35,7 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState, startL
   const appearances = new Map<string, GltfSceneAppearance>();
   const named = new Map<string, { kind: 'motion' | 'expression'; name: string }>();
   const batches: Array<Array<{ key: string; figure: ProjectedGltfFigure }>> = [];
+  const slotSchedule = new Map<number, Map<string, number | undefined>>();
   const runtimeGateLines = new Set<number>();
   let capacity = 0, unsafeRelease = false, truncated = false;
   const enqueue = (line: number, figures: Figures, slots: Map<string, number>) => {
@@ -65,6 +66,12 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState, startL
       }
     }
     path.slots = assigned;
+    const scheduled = slotSchedule.get(line);
+    if (!scheduled) slotSchedule.set(line, new Map(assigned));
+    else for (const [identity, slot] of assigned) {
+      if (!scheduled.has(identity)) scheduled.set(identity, slot);
+      else if (scheduled.get(identity) !== slot) scheduled.set(identity, undefined);
+    }
   };
   const target = (name: string, path: PathState, line: number) => {
     if (!name || dynamic(name)) {
@@ -139,6 +146,6 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState, startL
   if (unsafeRelease) for (const appearance of appearances.values()) appearance.lastUse = Infinity;
   const slotLastUse = new Map<number, number>();
   for (const appearance of appearances.values()) slotLastUse.set(appearance.slot, Math.max(slotLastUse.get(appearance.slot) ?? -1, appearance.lastUse));
-  return { capacity, appearances, named: [...named.values()], batches, runtimeGateLines: [...runtimeGateLines], slotLastUse,
+  return { capacity, appearances, named: [...named.values()], batches, slotSchedule, runtimeGateLines: [...runtimeGateLines], slotLastUse,
     canRelease: !unsafeRelease, truncated };
 }
