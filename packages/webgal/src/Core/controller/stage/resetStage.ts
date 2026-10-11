@@ -12,7 +12,8 @@ export interface ResetStageOptions {
 export const resetStage = (resetBacklog: boolean, resetSceneAndVar = true, options: ResetStageOptions = {}) => {
   const { commitStageState = true } = options;
   cancelPendingForward();
-  releaseSceneCharacters();
+  // Calculation-only preview keeps the displayed stage until the target state is ready.
+  if (commitStageState) releaseSceneCharacters();
   /**
    * 清空运行时
    */

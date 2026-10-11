@@ -94,6 +94,39 @@ function fixture() {
 }
 const a = '/a/config.json', b = '/b/config.json';
 
+test('editor calculation reset reuses displayed actors in both loading modes', async () => {
+  for (const mode of ['scene', 'on-demand']) {
+    const f = fixture(); f.setMode(mode);
+    const stage = f.state([['actor', a]]);
+    await f.hooks.prepareStage(stage, f.signal());
+    const displayed = f.take('actor', a);
+    let calculationReset = false;
+    const {resetStage} = moduleFrom('Core/controller/stage/resetStage.ts', {
+      'lodash/cloneDeep': {default: require('lodash/cloneDeep')},
+      '@/Core/controller/gamePlay/nextSentence': {cancelPendingForward() {}},
+      '@/Core/util/sceneCharacterLoading': {releaseSceneCharacters: () => f.hooks.releaseScene()},
+      '@/Core/WebGAL': {WebGAL: {
+        backlogManager: {makeBacklogEmpty() {}}, sceneManager: {resetScene() {}},
+        gameplay: {pixiStage: {removeAllAnimations() {}}, performController: {removeAllPerform() {}}, resetGamePlay() {}},
+      }},
+      '@/Core/Modules/stage/stageStateManager': {initState: {}, stageStateManager: {
+        getCalculationStageState: () => ({GameVar: {}}),
+        resetCalculationStageState() {calculationReset = true;},
+        resetAllStageState() {},
+      }},
+      '@/Core/controller/gamePlay/fastSkip': {stopFast() {}},
+    });
+    resetStage(true, true, {commitStageState: false});
+    assert.equal(calculationReset, true);
+    await f.hooks.prepareStage(stage, f.signal());
+    assert.equal(f.actors.length, 1, `${mode}: unchanged preview must not create another model`);
+    assert.equal(displayed.actor.disposed, false);
+    assert.equal(displayed.isActive, true);
+    resetStage(true); displayed.dispose();
+    assert.equal(displayed.actor.disposed, true, 'normal scene release still disposes the model');
+  }
+});
+
 test('stage restoration and reused preheated actors receive the current Focus before display',async()=>{
   const f=fixture();
   const first=f.state([['actor',a]]);first.live2dFocus=[{target:'actor',focus:{x:.4,y:-.3,instant:true}}];
