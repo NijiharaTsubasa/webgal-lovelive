@@ -58,3 +58,19 @@ test('costume wildcards select the middle member digits and band keywords match 
  for(const name of ['anon','rana','soyo','taki','tomori']) assert.equal(match(`custom/prefix_${name.toUpperCase()}_costume/model.json`),'mygo');
  for(const name of ['mutsumi','nyamu','uika','umiri','sakiko']) assert.equal(match(`custom/prefix_${name}_costume/model.json`),'ave-mujica');
 });
+
+test('LLAS playback indicators use separate auto and skip states with original icons',()=>{
+ const root=path.resolve(__dirname,'../../../themes/llas');
+ const Parser=require('../../parser/build/cjs/index.cjs').default;
+ const source=fs.readFileSync(path.join(root,'Stage/TextBox/textbox.scss'),'utf8');
+ const styles=new Parser().parseScssToWebgalStyleObj(source).classNameStyles.TextBox_main;
+ assert.match(styles,/data-playback='auto'[\s\S]*content: 'AUTO'[\s\S]*llas-auto\.png/);
+ assert.match(styles,/data-playback='skip'[\s\S]*content: 'SKIP'[\s\S]*llas-skip\.png/);
+ assert.match(styles,/display: none/);
+ assert.match(styles,/\[data-auto='true'\]:not\(\[data-playback\]\)::after/);
+ assert.match(styles,/\[data-auto\]:not\(\[data-playback\]\)::after/);
+ for(const name of ['llas-auto.png','llas-skip.png']) {
+  const image=fs.readFileSync(path.join(root,'assets',name));
+  assert.equal(image.readUInt32BE(16),44); assert.equal(image.readUInt32BE(20),44);
+ }
+});

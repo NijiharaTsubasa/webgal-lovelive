@@ -15,13 +15,43 @@
   font-weight: normal;
   letter-spacing: normal;
 
-  &[data-auto='true']::after {
+  &[data-playback]::after,
+  &[data-auto]:not([data-playback])::after {
+    content: '';
+    display: none;
+    position: fixed;
+    left: 29px;
+    top: 29px;
+    width: 326px;
+    height: 84px;
+    padding-left: 100px;
+    box-sizing: border-box;
+    align-items: center;
+    pointer-events: none;
+    color: #3c3c4b;
+    font-size: 46px;
+    font-weight: bold;
+    line-height: 1;
+    -webkit-text-stroke: 3px white;
+    paint-order: stroke fill;
+    background-position: left center;
+    background-size: 84px 84px;
+    background-repeat: no-repeat;
+    filter: drop-shadow(0 2px 2px #404040);
+  }
+
+  &[data-playback='auto']::after,
+  &[data-auto='true']:not([data-playback])::after {
     content: 'AUTO';
-    position: absolute;
-    right: -200px;
-    bottom: 56px;
-    color: #454545;
-    font-size: 32px;
+    display: flex;
+    background-image: url('game/template/assets/llas-auto.png');
+    animation: llas-auto 3.5s linear infinite;
+  }
+
+  &[data-playback='skip']::after {
+    content: 'SKIP';
+    display: flex;
+    background-image: url('game/template/assets/llas-skip.png');
   }
 }
 
@@ -46,8 +76,8 @@
     box-sizing: border-box;
     border-style: solid;
     border-color: transparent;
-    border-width: 38px 274px 234px;
-    border-image: url('game/template/assets/llas-dialog-background.png') 20 143 122 143 fill stretch;
+    border-width: 0 274px;
+    border-image: url('game/template/assets/llas-dialog-background.png') 0 143 fill stretch;
   }
 
   &[data-waiting='true']::before {
@@ -324,6 +354,12 @@
 @keyframes llas-next {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(6px); }
+}
+
+@keyframes llas-auto {
+  0%, 14.285714% { opacity: 1; }
+  57.142857% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 @keyframes llas-text-in {

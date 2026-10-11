@@ -210,9 +210,11 @@ export default function IMSSTextbox(props: ITextboxProps) {
   const lhCss = css(lineHeightCssStr);
 
   const isWaiting = useValue(false);
+  const playbackMode = useValue(WebGAL.gameplay.isFast ? 'skip' : WebGAL.gameplay.isAuto ? 'auto' : '');
   useEffect(() => {
     const updateIsWaiting = () => {
       isWaiting.set(!(WebGAL.gameplay.isAuto || WebGAL.gameplay.isFast) && WebGAL.gameplay.isWaiting);
+      playbackMode.set(WebGAL.gameplay.isFast ? 'skip' : WebGAL.gameplay.isAuto ? 'auto' : '');
     };
     const timer = setInterval(updateIsWaiting, 50);
     return () => {
@@ -252,6 +254,7 @@ export default function IMSSTextbox(props: ITextboxProps) {
               fontFamily: font,
             }}
             data-auto={WebGAL.gameplay.isAuto || WebGAL.gameplay.isFast ? 'true' : 'false'}
+            data-playback={playbackMode.value}
           >
             <div id="miniAvatar" className={applyStyle('miniAvatarContainer', styles.miniAvatarContainer)}>
               {miniAvatar !== '' && (
