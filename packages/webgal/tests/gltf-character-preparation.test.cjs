@@ -9,7 +9,9 @@ function load(OffscreenCharacter = {}, resolveFigure = async url=>({url:new URL(
   const filename=path.resolve(__dirname,'../src/Core/Modules/gltf/gltfCharacter.ts');
   const loaded=new Module(filename,module);
   loaded.paths=Module._nodeModulePaths(path.dirname(filename));
-  const catalog={indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog};
+  const ready=new Set();
+  const catalog={indexUrl:'http://localhost/game/3d/runtime/index.json',load:async()=>catalog,
+    isNamedReady:(kind,name)=>ready.has(`${kind}:${name}`),markNamedReady:(kind,name)=>ready.add(`${kind}:${name}`)};
   loaded.require=name=>name==='@/store/store'?{webgalStore:{getState:()=>({userData:{optionData:{meshClothEnabled}}})}}:name==='webgal-lovelive-gltf-renderer'?{OffscreenCharacter}:name==='./fixedGltfResources'
     ?{fixedGltfResources:()=>catalog,resolveFigureConfig:resolveFigure}
     :Module.prototype.require.call(loaded,name);
@@ -56,6 +58,19 @@ test('prepared initial command names are not replayed; prepare waits for late co
   const preparing=runtime.prepare();await flush();
   runtime.setExpression('late');first.resolve();await preparing;
   assert.deepEqual(calls,[['expression','late']]);assert.equal(preparations,2);
+});
+
+test('readiness rejects pending commands, failed commands and unusable contexts',async t=>{
+  t.mock.method(console,'error',()=>{});
+  const pending=deferred(),{GltfCharacterRuntime}=load();
+  const actor={isUsable:true,setMotion:()=>pending.promise,prepare:async()=>{}};
+  const runtime=new GltfCharacterRuntime(actor,{motion:'initial',expression:''});
+  assert.equal(runtime.isReadyFor('initial',''),true);
+  runtime.setMotion('next');assert.equal(runtime.isReady,false);
+  pending.resolve();await runtime.prepare();assert.equal(runtime.isReadyFor('next',''),true);
+  actor.isUsable=false;assert.equal(runtime.isReady,false);
+  const failed=new GltfCharacterRuntime({isUsable:true,setMotion:async()=>{throw Error('failed');},prepare:async()=>{}});
+  failed.setMotion('bad');await assert.rejects(failed.prepare());assert.equal(failed.isReady,false);
 });
 
 test('failed same-name commands can retry, and superseded failures do not poison the latest state', async t=>{

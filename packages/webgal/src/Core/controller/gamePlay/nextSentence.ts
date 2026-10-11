@@ -5,7 +5,7 @@ import { webgalStore } from '@/store/store';
 import { WebGAL } from '@/Core/WebGAL';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import cloneDeep from 'lodash/cloneDeep';
-import { beginCharacterLoading, cancelCharacterLoading, isCharacterLoadingBusy, prepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
+import { beginCharacterLoading, cancelCharacterLoading, isCharacterLoadingBusy, prepareStageCharacters, tryPrepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
 
 /**
  * 执行一次推进前检查。
@@ -108,6 +108,12 @@ export const commitForward = async (): Promise<void> => {
     cursor: WebGAL.sceneManager.sceneData.currentSentenceId,
   };
   if (batch.attempt?.isCurrent()) return;
+  if (!batch.attempt && tryPrepareStageCharacters(batch.stage, new AbortController().signal)) {
+    stageStateManager.replaceCalculationStageState(batch.stage);
+    pendingBatch = undefined;
+    commitPreparedForward();
+    return;
+  }
   const ticket = beginCharacterLoading('stage');
   batch.attempt = ticket;
   try {

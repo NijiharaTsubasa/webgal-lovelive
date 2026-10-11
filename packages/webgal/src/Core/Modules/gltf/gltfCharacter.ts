@@ -41,10 +41,16 @@ export async function characterOptions(url: string, width: number, height: numbe
 }
 
 export async function preloadGltfNamedResources(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
+  requests = requests.filter(({kind, name}) => !fixedGltfResources().isNamedReady(kind, name));
   if (!requests.length) return;
   const { OffscreenCharacter } = await import('webgal-lovelive-gltf-renderer');
   const resourceCatalog = await fixedGltfResources().load();
   await OffscreenCharacter.preloadNamed(resourceCatalog.indexUrl, requests, resourceCatalog);
+  for (const {kind, name} of requests) resourceCatalog.markNamedReady(kind, name);
+}
+
+export function areGltfNamedResourcesReady(requests: Array<{ kind: 'motion' | 'expression'; name: string }>) {
+  return requests.every(({kind, name}) => fixedGltfResources().isNamedReady(kind, name));
 }
 
 export async function setGltfPreloadRequests(requests: GltfPreloadRequest[]) {
@@ -78,6 +84,7 @@ export class GltfCharacterRuntime {
   private commandErrors: Partial<Record<'motion' | 'expression', unknown>> = {};
   private commandGenerations = { motion: 0, expression: 0 };
   private active = true;
+  private pendingCommands = 0;
   public constructor(private readonly character: OffscreenCharacter, initial: GltfInitialState = {},
     private readonly release?: () => void) {
     this.motion = initial.motion;
@@ -88,9 +95,16 @@ export class GltfCharacterRuntime {
     return this.character.canvas;
   }
   public get isActive() { return this.active && !this.disposed; }
+  public get isReady() {
+    return this.character.isUsable && this.pendingCommands === 0 && !Object.keys(this.commandErrors).length;
+  }
+  public isReadyFor(motion: string, expression: string) {
+    return this.isReady && this.motion === motion && this.expression === expression;
+  }
   public activate() { this.disposed = false; this.active = true; }
   public suspend() { this.active = false; }
   private enqueue(kind: 'motion' | 'expression', command: () => Promise<void>) {
+    this.pendingCommands++;
     const generation = ++this.commandGenerations[kind];
     delete this.commandErrors[kind];
     this.commands = this.commands
@@ -101,7 +115,7 @@ export class GltfCharacterRuntime {
           this.commandErrors[kind] = error;
         }
         console.error('glTF character command failed', error);
-      });
+      }).finally(() => { this.pendingCommands--; });
   }
   public setMotion(name: string) {
     if (this.motion === name) return;

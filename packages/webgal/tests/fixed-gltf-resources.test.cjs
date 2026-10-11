@@ -83,6 +83,34 @@ test('parameter expressions load directly without overriding file fades',async()
   assert.equal(expression.component.fade_in,undefined);
   assert.deepEqual(calls,[url('mtn_exp/anon/sad.exp.json')]);
 });
+
+test('prepared named resources and parsed configs reuse cached results',async()=>{
+  const config=url('figure/a/config.json');
+  const files=new Map([[config,{components:[]}],
+    [url('motion/pose.motionbin'),binary({description:'pose'})]]);
+  const {catalog,calls}=fixture(files);
+  assert.equal(await catalog.fetch(config),await catalog.fetch(config));
+  const first=await catalog.resolveMotion('pose');
+  assert.equal(await catalog.resolveMotion('pose'),first);
+  assert.equal(catalog.isNamedReady('motion','pose'),true);
+  assert.equal(calls.filter(p=>p.endsWith('pose.mtn')).length,1);
+  for(let i=0;i<256;i++) {
+    const target=`http://localhost/cache/${i}`;files.set(target,'cache');await catalog.fetch(target,'bytes');
+  }
+  assert.equal(catalog.isNamedReady('motion','pose'),false);
+});
+
+test('missing and failed named resources can retry after becoming available',async()=>{
+  const files=new Map(),{catalog}=fixture(files);
+  assert.equal(await catalog.resolveExpression('later',{optional:true}),null);
+  assert.equal(catalog.isNamedReady('expression','later'),false);
+  files.set(url('mtn_exp/later.exp.json'),{params:[]});
+  assert.ok(await catalog.resolveExpression('later'));
+  files.set(url('mtn_exp/retry.mtn'),new Response('',{status:503}));
+  await assert.rejects(catalog.resolveMotion('retry'));
+  files.set(url('mtn_exp/retry.mtn'),'motion');
+  assert.ok(await catalog.resolveMotion('retry'));
+});
 test('non-404 failures never fallback, optional only suppresses absent resources',async()=>{
   const {catalog,calls}=fixture(new Map([[url('mtn_exp/broken.mtn'),new Response('',{status:503})]]));
   await assert.rejects(catalog.resolveMotion('broken',{optional:true}),e=>e instanceof ResourceHttpError&&e.status===503);

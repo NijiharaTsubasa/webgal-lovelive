@@ -17,6 +17,10 @@ export class FixedGltfResources {
   entries: FixedResourceEntry[] = [];
   private pending = new Map<string, Promise<ArrayBuffer>>();
   private bytes = new Map<string, ArrayBuffer>();
+  private json = new Map<string, any>();
+  private named = new Map<string, Promise<FixedResourceEntry | null>>();
+  private namedEntries = new Map<string, FixedResourceEntry | null>();
+  private nativeExpressions = new Set<string>();
   private cachedBytes = 0;
   private loaded?: Promise<this>;
 
@@ -37,7 +41,7 @@ export class FixedGltfResources {
         if (value.byteLength <= 64 * 1024 * 1024) {
           while (this.bytes.size && (this.bytes.size >= 256 || this.cachedBytes + value.byteLength > 64 * 1024 * 1024)) {
             const oldest = this.bytes.keys().next().value as string;
-            this.cachedBytes -= this.bytes.get(oldest)!.byteLength; this.bytes.delete(oldest);
+            this.cachedBytes -= this.bytes.get(oldest)!.byteLength; this.bytes.delete(oldest); this.json.delete(oldest);
           }
           this.bytes.set(url, value); this.cachedBytes += value.byteLength;
         }
@@ -51,7 +55,11 @@ export class FixedGltfResources {
 
   async fetch(url: string, kind = 'json'): Promise<any> {
     const bytes = await this.buffer(url);
-    return kind === 'bytes' ? bytes : JSON.parse(new TextDecoder().decode(bytes));
+    if (kind === 'bytes') return bytes;
+    if (this.json.has(url)) return this.json.get(url);
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    if (this.bytes.has(url)) this.json.set(url, value);
+    return value;
   }
   async response(url: string) { return new Response(await this.buffer(url)); }
 
@@ -97,7 +105,37 @@ export class FixedGltfResources {
     return { type: 'model', name: models[0].name, component: models[0], config, basePath: new URL('.', config).href };
   }
 
-  async resolveMotion(name: string, { optional = false } = {}): Promise<FixedResourceEntry | null> {
+  isNamedReady(kind: 'motion' | 'expression', name: string) {
+    if (!name) return true;
+    if (kind === 'expression' && this.nativeExpressions.has(name)) return true;
+    const key = `${kind}:${name}`;
+    if (!this.namedEntries.has(key)) return false;
+    const entry = this.namedEntries.get(key);
+    return !!entry && this.bytes.has(entry.config);
+  }
+  markNamedReady(kind: 'motion' | 'expression', name: string) {
+    if (kind === 'expression' && name.startsWith('3d:')) this.nativeExpressions.add(name);
+  }
+  private async resolveNamed(kind: 'motion' | 'expression', name: string, optional: boolean) {
+    const key = `${kind}:${name}`;
+    let pending = this.named.get(key);
+    if (!pending) {
+      pending = (kind === 'motion' ? this.readMotion(name) : this.readExpression(name)).then(entry => {
+        if (entry) this.namedEntries.set(key, entry);
+        else this.named.delete(key);
+        return entry;
+      });
+      this.named.set(key, pending);
+      void pending.catch(() => { if (this.named.get(key) === pending) this.named.delete(key); });
+    }
+    const entry = await pending;
+    if (!entry && !optional) throw new ResourceHttpError(404, new URL(kind === 'motion'
+      ? `motion/${name.endsWith('.motionbin') ? name : `${name}.motionbin`}` : `mtn_exp/${name}.exp.json`, this.root).href);
+    return entry;
+  }
+  resolveMotion(name: string, { optional = false } = {}) { return this.resolveNamed('motion', name, optional); }
+  resolveExpression(name: string, { optional = false } = {}) { return this.resolveNamed('expression', name, optional); }
+  private async readMotion(name: string): Promise<FixedResourceEntry | null> {
     const binary = name.endsWith('.motionbin');
     let url = new URL(binary ? `motion/${name}` : `mtn_exp/${name}.mtn`, this.root).href;
     let type = binary ? 'motion' : 'garupa-motion';
@@ -107,9 +145,8 @@ export class FixedGltfResources {
       if (!binary) {
         url = new URL(`motion/${name}.motionbin`, this.root).href; type = 'motion';
         try { await this.buffer(url); }
-        catch (fallback) { if (optional && fallback instanceof ResourceHttpError && fallback.status === 404) return null; throw fallback; }
-      } else if (optional) return null;
-      else throw error;
+        catch (fallback) { if (fallback instanceof ResourceHttpError && fallback.status === 404) return null; throw fallback; }
+      } else return null;
     }
     const component: Component = { type, name, src: new URL(url).pathname.split('/').pop() };
     if (type === 'motion') {
@@ -129,10 +166,10 @@ export class FixedGltfResources {
     return { type, name, config: url, component, motionGroup: component.motionGroup, basePath: new URL('.', url).href };
   }
 
-  async resolveExpression(name: string, { optional = false } = {}) {
+  private async readExpression(name: string) {
     const url = new URL(`mtn_exp/${name}.exp.json`, this.root).href;
     try { await this.buffer(url); }
-    catch (error) { if (optional && error instanceof ResourceHttpError && error.status === 404) return null; throw error; }
+    catch (error) { if (error instanceof ResourceHttpError && error.status === 404) return null; throw error; }
     const component = { type: 'garupa-expression', name, src: new URL(url).pathname.split('/').pop() };
     return { type: component.type, name, config: url, component, basePath: new URL('.', url).href };
   }

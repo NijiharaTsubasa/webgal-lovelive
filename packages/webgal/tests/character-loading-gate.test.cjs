@@ -45,6 +45,17 @@ test('whole -next group waits before commit; repeated clicks and internal next c
  wait.resolve();await p;assert.deepEqual(f.calls,['click','forward',['commit','new',2],'performs']);
  assert.equal(loading.getCharacterLoadingStatus().phase,'idle');
 });
+test('ready stage commits without publishing a loading state or invoking async preparation in both modes',async()=>{
+ for(const mode of ['scene','on-demand']) {
+  const f=fixture(),loading=f.load('Core/util/sceneCharacterLoading.ts'),next=f.load('Core/controller/gamePlay/nextSentence.ts'),statuses=[];
+  loading.setCharacterLoadingMode(mode);
+  loading.subscribeCharacterLoading(status=>statuses.push(status.phase));
+  loading.registerSceneCharacterLoadingHooks({tryPrepareStage:()=>true,prepareStage:async()=>assert.fail('ready stage must not prepare again'),prepareScene:async()=>{}});
+  await next.nextSentence();
+  assert.deepEqual(statuses,[],`${mode}: ready stage must never enter Loading`);
+  assert.equal(f.calls.filter(call=>Array.isArray(call)&&call[0]==='commit').length,1);
+ }
+});
 test('failed group retries without executing scripts a second time',async()=>{
  const f=fixture(),loading=f.load('Core/util/sceneCharacterLoading.ts'),next=f.load('Core/controller/gamePlay/nextSentence.ts');let n=0;
  loading.registerSceneCharacterLoadingHooks({prepareStage:async()=>{if(++n===1)throw Error('gpu');},prepareScene:async()=>{}});

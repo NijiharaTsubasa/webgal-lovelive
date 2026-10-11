@@ -8,6 +8,8 @@ export interface CharacterLoadingStatus {
   error?: unknown;
 }
 export interface SceneCharacterLoadingHooks {
+  /** Reserve already-ready actors without I/O or publishing a loading state. */
+  tryPrepareStage?(stage: IStageState, signal: AbortSignal): boolean;
   prepareStage(stage: IStageState, signal: AbortSignal): Promise<void>;
   prepareScene(scene: IScene, state: IStageState, signal: AbortSignal): Promise<void>;
   releaseScene?(): void;
@@ -66,6 +68,9 @@ export function beginCharacterLoading(kind: 'scene' | 'stage') {
 export async function prepareStageCharacters(stage: IStageState, signal: AbortSignal) {
   if (signal.aborted) return;
   await hooks?.prepareStage(stage, signal);
+}
+export function tryPrepareStageCharacters(stage: IStageState, signal: AbortSignal) {
+  return !signal.aborted && hooks?.tryPrepareStage?.(stage, signal) === true;
 }
 export async function prepareSceneCharacters(scene: IScene, state: IStageState, signal: AbortSignal) {
   if (signal.aborted || mode !== 'scene') return;

@@ -4,7 +4,7 @@ import { WebGAL } from '@/Core/WebGAL';
 import { registerSceneCharacterLoadingHooks, getCharacterLoadingMode } from '@/Core/util/sceneCharacterLoading';
 import type { ProjectedGltfFigure } from './gltfFigureState';
 import { planGltfSceneResidency, gltfFigureIdentity } from './gltfScenePlan';
-import { characterOptions, GltfCharacterRuntime, preloadGltfNamedResources } from './gltfCharacter';
+import { characterOptions, GltfCharacterRuntime, preloadGltfNamedResources, areGltfNamedResourcesReady } from './gltfCharacter';
 import { resolveFigureConfig } from './fixedGltfResources';
 import { seedGltfFigures } from './gltfFigureState';
 import { baseFocusParam } from '@/Core/live2DCore';
@@ -15,14 +15,38 @@ interface Residency { surfaces: Surface[]; residents: Resident[]; active: Set<Re
 let current: Residency | undefined;
 const retired = new Set<Residency>();
 const prepared = new Map<string, Resident>();
-let work: Promise<unknown> = Promise.resolve();
+interface PreparationTask { run: () => Promise<unknown>; resolve: (value: any) => void; reject: (error: unknown) => void }
+const foregroundTasks: PreparationTask[] = [], backgroundTasks: PreparationTask[] = [];
+let preparing = false;
+let predictionWork: Promise<unknown> = Promise.resolve();
 let prediction: AbortController | undefined;
 let predictionSignature = '';
 let predictedIdentities = new Set<string>();
-const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
-  const result = work.then(operation, operation);
-  work = result.catch(() => undefined);
+const nativeConfigUrls = new Set<string>();
+async function isGltfConfig(url: string) {
+  if (nativeConfigUrls.has(url)) return false;
+  const result = (await resolveFigureConfig(url)).gltf;
+  if (!result) nativeConfigUrls.add(url);
   return result;
+}
+const namedInputs = (figure: ProjectedGltfFigure) => [
+  ...(figure.motion ? [{ kind: 'motion' as const, name: figure.motion }] : []),
+  ...(figure.expression ? [{ kind: 'expression' as const, name: figure.expression }] : []),
+];
+function drainPreparation() {
+  if (preparing) return;
+  const task = foregroundTasks.shift() ?? backgroundTasks.shift();
+  if (!task) return;
+  preparing = true;
+  void Promise.resolve().then(task.run).then(task.resolve, task.reject).finally(() => {
+    preparing = false; drainPreparation();
+  });
+}
+const serialize = <T>(operation: () => Promise<T>, background = false): Promise<T> => {
+  return new Promise<T>((resolve, reject) => {
+    (background ? backgroundTasks : foregroundTasks).push({run: operation, resolve, reject});
+    drainPreparation();
+  });
 };
 const assertCurrent = (signal: AbortSignal) => { if (signal.aborted) throw new DOMException('Cancelled', 'AbortError'); };
 
@@ -83,9 +107,12 @@ async function prepareScene(scene: IScene, state: IStageState, signal: AbortSign
     await preloadGltfNamedResources(plan.named);
     for (const { slot, key, figure, lastUse } of plan.appearances.values()) {
       assertCurrent(signal);
-      if (!(await resolveFigureConfig(figure.url)).gltf) continue;
+      if (!(await isGltfConfig(figure.url))) continue;
       const record = await addResident(owner, slot, key, figure, signal);
       record.lastUse = lastUse;
+      // OffscreenCharacter.create has already prepared this exact initial state.
+      record.backgroundReady = true;
+      record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
     }
     assertCurrent(signal);
     const previous = current;
@@ -100,7 +127,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
   const targets = [];
   for (const entry of figures) {
     if (!/\/config\.json(?:[?#].*)?$/.test(entry.figure.url)) continue;
-    if ((await resolveFigureConfig(entry.figure.url)).gltf) targets.push(entry);
+    if (await isGltfConfig(entry.figure.url)) targets.push(entry);
     assertCurrent(signal);
   }
   const previous = current;
@@ -157,19 +184,19 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
   for (const { record, figure } of selections) {
     assertCurrent(signal);
     if (owner.active.has(record)) {
-      await preloadGltfNamedResources([
-        ...(figure.motion ? [{ kind: 'motion' as const, name: figure.motion }] : []),
-        ...(figure.expression ? [{ kind: 'expression' as const, name: figure.expression }] : []),
-      ]);
+      if (!record.runtime.isReady) await record.runtime.prepare();
+      if (!record.runtime.isReadyFor(figure.motion, figure.expression)) await preloadGltfNamedResources(namedInputs(figure));
       continue;
     }
     if (!owner.active.has(record)) { record.runtime.activate(); record.runtime.suspend(); }
     record.runtime.setFocus(figure.focus ?? baseFocusParam);
-    if (!record.backgroundReady || record.warmedMotion !== figure.motion || record.warmedExpression !== figure.expression) {
+    if (!record.backgroundReady || !record.runtime.isReadyFor(figure.motion, figure.expression)
+        || record.warmedMotion !== figure.motion || record.warmedExpression !== figure.expression) {
       record.runtime.setMotion(figure.motion);
       record.runtime.setExpression(figure.expression);
       await record.runtime.prepare();
       record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
+      record.backgroundReady = true;
     }
     prepared.set(record.identity, record);
   }
@@ -200,9 +227,52 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
   }
 }
 
+/** No file lookup, Promise queue, GPU work, or mutation of displayed commands. */
+function tryPrepareStage(state: IStageState, signal: AbortSignal) {
+  if (signal.aborted) return false;
+  const targets = stageFigures(state).filter(({figure}) => /\/config\.json(?:[?#].*)?$/.test(figure.url)
+    && !nativeConfigUrls.has(figure.url));
+  if (!targets.length) {
+    if (current) for (const record of [...current.residents]) {
+      if (!current.active.has(record) && !prepared.has(record.identity) && pastLastUse(current, record)) releaseResident(current, record);
+    }
+    return true;
+  }
+  const owner = current;
+  if (!owner || owner.retired || owner.mode !== getCharacterLoadingMode()) return false;
+  const used = new Set<number>();
+  const held: Array<{record: Resident; figure: ProjectedGltfFigure}> = [];
+  for (const {key, figure} of targets) {
+    const identity = gltfFigureIdentity(key, figure);
+    const displayed = WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime;
+    const record = owner.residents.find(item => item.identity === identity && !used.has(item.slot)
+      && (owner.active.has(item) ? item.runtime === displayed
+        : item.backgroundReady && item.warmedMotion === figure.motion && item.warmedExpression === figure.expression));
+    if (!record || !record.runtime.isReady) return false;
+    if (!record.runtime.isReadyFor(figure.motion, figure.expression)
+        && !areGltfNamedResourcesReady(namedInputs(figure))) return false;
+    used.add(record.slot);
+    if (!owner.active.has(record)) held.push({record, figure});
+  }
+  // Only publish reservations after the whole target group has passed.
+  for (const {record, figure} of held) {
+    record.runtime.activate(); record.runtime.suspend();
+    record.runtime.setFocus(figure.focus ?? baseFocusParam);
+    prepared.set(record.identity, record);
+  }
+  signal.addEventListener('abort', () => {
+    for (const {record} of held) if (prepared.get(record.identity) === record) {
+      prepared.delete(record.identity);
+      if (owner.mode === 'on-demand' && !owner.active.has(record) && !predictedIdentities.has(record.identity)
+          && owner.residents.includes(record)) releaseResident(owner, record);
+    }
+  }, {once:true});
+  return true;
+}
+
 async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
   const owner = current;
-  if (!owner || owner.retired || owner.mode !== 'on-demand' || owner.mode !== getCharacterLoadingMode()) return false;
+  if (!owner || owner.retired || owner.mode !== getCharacterLoadingMode()) return false;
   const named: Array<{kind: 'motion' | 'expression'; name: string}> = [];
   const held: Resident[] = [];
   const used = new Set<number>();
@@ -218,8 +288,8 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
     const record = owner.residents.find(record => !used.has(record.slot) && record.identity === identity
       && (owner.active.has(record) ? record.runtime === displayed
         : record.backgroundReady && record.warmedMotion === figure.motion && record.warmedExpression === figure.expression));
-    if (!record) {
-      if ((await resolveFigureConfig(figure.url)).gltf) { rollback(); return false; }
+    if (!record || !record.runtime.isReady) {
+      if (await isGltfConfig(figure.url)) { rollback(); return false; }
       continue;
     }
     used.add(record.slot);
@@ -227,11 +297,10 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
       record.runtime.setFocus(figure.focus ?? baseFocusParam);
       held.push(record); prepared.set(identity, record);
     }
-    if (figure.motion) named.push({kind: 'motion', name: figure.motion});
-    if (figure.expression) named.push({kind: 'expression', name: figure.expression});
+    if (!record.runtime.isReadyFor(figure.motion, figure.expression)) named.push(...namedInputs(figure));
   }
   // Ready actors do not depend on an unrelated future actor's GPU preparation.
-  await preloadGltfNamedResources(named);
+  if (named.length) await preloadGltfNamedResources(named);
   assertCurrent(signal);
   if (current !== owner || owner.retired || held.some(record => !owner.residents.includes(record))) {
     rollback(); return false;
@@ -244,44 +313,58 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
 /** Warm the next reachable groups without publishing loading state or touching displayed canvases. */
 export function prewarmGltfPredictions(batches: Array<Array<{ key: string; figure: ProjectedGltfFigure }>>) {
   const signature = JSON.stringify([getCharacterLoadingMode(), batches]);
-  if (signature === predictionSignature && !prediction?.signal.aborted) return work.then(() => undefined);
+  if (signature === predictionSignature && !prediction?.signal.aborted) return predictionWork;
   predictionSignature = signature;
   predictedIdentities = new Set(batches.flatMap(batch => batch.map(({key, figure}) => gltfFigureIdentity(key, figure))));
   prediction?.abort();
   const controller = prediction = new AbortController();
-  return serialize(async () => {
+  const run = async () => {
     if (controller.signal.aborted || getCharacterLoadingMode() !== 'on-demand') return;
-    const owner = current ?? (current = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'on-demand' });
-    if (owner.mode !== 'on-demand') return;
     const wanted = new Map(batches.flatMap(batch => batch.map(({key, figure}) =>
       [gltfFigureIdentity(key, figure), {key, figure}] as const)));
-    for (const record of [...owner.residents]) {
-      if (!owner.active.has(record) && prepared.get(record.identity) !== record && !wanted.has(record.identity)) releaseResident(owner, record);
-    }
+    const owner = await serialize(async () => {
+      if (controller.signal.aborted || getCharacterLoadingMode() !== 'on-demand') return;
+      const owner = current ?? (current = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'on-demand' });
+      if (owner.mode !== 'on-demand') return;
+      for (const record of [...owner.residents]) {
+        if (!owner.active.has(record) && prepared.get(record.identity) !== record && !wanted.has(record.identity)) releaseResident(owner, record);
+      }
+      return owner;
+    }, true);
+    if (!owner) return;
+    const created = new Set<Resident>();
     try {
       for (const [identity, {key, figure}] of wanted) {
-        assertCurrent(controller.signal);
-        if (!(await resolveFigureConfig(figure.url)).gltf) continue;
-        assertCurrent(controller.signal);
-        // Displayed instances keep their current commands and physics state.
-        if (owner.residents.some(record => record.identity === identity)) continue;
-        let slot = 0;
-        while (owner.residents.some(record => record.slot === slot)) slot++;
-        const record = await addResident(owner, slot, key, figure, controller.signal);
-        await record.runtime.prepare();
-        record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
-        record.backgroundReady = true;
-        assertCurrent(controller.signal);
+        // A current stage group can run between speculative actor preparations.
+        await serialize(async () => {
+          assertCurrent(controller.signal);
+          if (owner !== current || owner.retired) return;
+          if (!(await isGltfConfig(figure.url))) return;
+          assertCurrent(controller.signal);
+          // Displayed instances keep their current commands and physics state.
+          if (owner.residents.some(record => record.identity === identity)) return;
+          let slot = 0;
+          while (owner.residents.some(record => record.slot === slot)) slot++;
+          const record = await addResident(owner, slot, key, figure, controller.signal);
+          created.add(record);
+          await record.runtime.prepare();
+          record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
+          record.backgroundReady = true;
+          assertCurrent(controller.signal);
+        }, true);
       }
     } catch (error) {
-      for (const record of [...owner.residents]) if (!owner.active.has(record) && prepared.get(record.identity) !== record) releaseResident(owner, record);
+      for (const record of created) if (owner.residents.includes(record) && !owner.active.has(record)
+          && prepared.get(record.identity) !== record) releaseResident(owner, record);
       owner.surfaces.forEach((surface, slot) => {
         if (!owner.residents.some(record => record.slot === slot)) { surface?.dispose(); delete owner.surfaces[slot]; }
       });
       if (prediction === controller) predictionSignature = '';
       if (!controller.signal.aborted) throw error;
     }
-  });
+  };
+  predictionWork = run();
+  return predictionWork;
 }
 
 /** A prepared actor attaches synchronously so a committed group starts together. */
@@ -291,6 +374,9 @@ export function takePreparedGltfCharacter(key: string, url: string, position: Pr
   if (!record || !current?.residents.includes(record)) return;
   prepared.delete(identity);
   record.backgroundReady = false;
+  for (const active of current.active) if (active !== record && active.slot === record.slot) {
+    active.runtime.suspend(); current.surfaces[record.slot].deactivate(active.actor);
+  }
   current.active.add(record);
   current.surfaces[record.slot].activate(record.actor);
   record.runtime.activate();
@@ -313,7 +399,9 @@ function releaseScene() {
   retire(owner);
 }
 registerSceneCharacterLoadingHooks({
+  tryPrepareStage,
   prepareStage: async (state, signal) => {
+    if (tryPrepareStage(state, signal)) return;
     if (await prepareDisplayedStage(state, signal)) return;
     return serialize(() => prepareStage(state, signal));
   },

@@ -27,7 +27,7 @@ function moduleFrom(file, imports, cache = new Map()) {
 }
 function fixture() {
   let hooks, mode = 'scene', plan = { batches: [], named: [] }, prepareFailure, onPrepare, onCreate;
-  const actors = [], surfaces = [], displayed = new Map();
+  const actors = [], surfaces = [], displayed = new Map(), checks = { configs: 0, named: 0 };
   class Surface {
     constructor() { this.actors = new Set(); this.active = null; this.disposed = false; surfaces.push(this); }
     activate(actor) { assert.equal(this.disposed, false); assert.ok(!this.active || this.active === actor); this.active = actor; }
@@ -35,7 +35,7 @@ function fixture() {
     dispose() { if (this.disposed) return; this.disposed = true; for (const actor of [...this.actors]) actor.dispose(); this.actors.clear(); }
   }
   class Actor {
-    constructor(options) { this.surface = options.surface; this.surface.actors.add(this); this.disposed = false; actors.push(this); }
+    constructor(options) { this.surface = options.surface; this.sourceUrl = options.modelUrl; this.surface.actors.add(this); this.disposed = false; actors.push(this); }
     dispose() { this.disposed = true; this.surface.actors.delete(this); this.surface.deactivate(this); }
     static async create(options) { const actor = new Actor(options); await onCreate?.(); return actor; }
   }
@@ -47,6 +47,8 @@ function fixture() {
     setExpression(value) { this.expression = value; }
     setFocus(value) { this.focus = {...value}; }
     update() {}
+    get isReady() { return !this.actor.disposed; }
+    isReadyFor(motion, expression) { return !this.actor.disposed && this.motion === motion && this.expression === expression; }
     async prepare() { this.actor.prepared = (this.actor.prepared ?? 0) + 1; await onPrepare?.(this.actor); if (prepareFailure) { const error = prepareFailure; prepareFailure = undefined; throw error; } }
     dispose() { if (this.disposed) return; this.disposed = true; this.isActive = false; this.release(); }
   }
@@ -73,8 +75,8 @@ function fixture() {
     '@/Core/WebGAL': { WebGAL: { stageWidth:1920, stageHeight:1080, sceneManager:{sceneData}, gameplay:{pixiStage:{getStageObjByKey: key => displayed.get(key)}} } },
     '@/Core/live2DCore': {baseFocusParam:{x:0,y:0,instant:false}},
     '@/Core/util/sceneCharacterLoading': { registerSceneCharacterLoadingHooks(value) { hooks = value; }, getCharacterLoadingMode: () => mode },
-    './gltfCharacter': { GltfCharacterRuntime:Runtime, characterOptions:async url => ({modelUrl:url}), preloadGltfNamedResources:async () => {} },
-    './fixedGltfResources': { resolveFigureConfig:async url => ({gltf:url.endsWith('/config.json')}) },
+    './gltfCharacter': { GltfCharacterRuntime:Runtime, characterOptions:async url => ({modelUrl:url}), preloadGltfNamedResources:async () => { checks.named++; }, areGltfNamedResourcesReady: () => true },
+    './fixedGltfResources': { resolveFigureConfig:async url => { checks.configs++; return {gltf:url.endsWith('/config.json')}; } },
     'webgal-lovelive-gltf-renderer': { OffscreenCharacter:Actor, CharacterRenderSurface:Surface },
   });
   const state = (items) => ({figureLeft:'',figureCenter:'',figureRight:'',freeFigure:items.map(([key,url]) => ({key,name:url,basePosition:'center'})), live2dMotion:[],live2dExpression:[],live2dFocus:[]});
@@ -86,13 +88,40 @@ function fixture() {
   };
   const realPrepareScene = hooks.prepareScene;
   hooks.prepareScene = (input,state,signal) => realPrepareScene(scene(input.sceneUrl),state,signal);
-  return {api,hooks,actors,surfaces,displayed,state,signal,take,sceneData,C,sentence,
+  return {api,hooks,actors,surfaces,displayed,state,signal,take,sceneData,C,sentence,checks,
     setMode(value) {mode=value;}, setPlan(value) {plan=value;}, failPrepare() {prepareFailure = Error('fixture preparation failed');},
     onPrepare(fn) {onPrepare=fn;},
     onCreate(fn) {onCreate=fn;},
   };
 }
 const a = '/a/config.json', b = '/b/config.json';
+
+test('unchanged nine-actor dialogue and textbox changes reuse readiness without resource checks in both modes', async () => {
+  for (const mode of ['scene', 'on-demand']) {
+    const f = fixture(); f.setMode(mode);
+    const items = Array.from({length:9}, (_, i) => [`actor${i}`, `/actor${i}/config.json`]);
+    const stage = f.state(items);
+    await f.hooks.prepareStage(stage, f.signal());
+    for (const [key, url] of items) f.take(key, url);
+    const before = {...f.checks};
+    for (const showTextBox of [true, false, true]) {
+      assert.equal(f.hooks.tryPrepareStage({...stage, showTextBox}, f.signal()), true);
+    }
+    assert.deepEqual(f.checks, before, `${mode}: no config or named-resource check is needed`);
+    assert.ok(f.actors.every(actor => actor.prepared === 1));
+  }
+});
+
+test('scene initialization readiness is reused for the first appearance without a second GPU preparation', async () => {
+  const f = fixture();
+  f.setPlan({batches:[[{key:'actor',figure:{url:a,position:'center',bounds:[0,0,1,1],motion:'',expression:''}}]]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'}, f.state([]), f.signal());
+  const before = {...f.checks};
+  assert.equal(f.hooks.tryPrepareStage(f.state([['actor',a]]), f.signal()), true);
+  assert.equal(f.take('actor',a).actor, f.actors[0]);
+  assert.deepEqual(f.checks, before);
+  assert.equal(f.actors[0].prepared, undefined, 'create already prepares its initial state');
+});
 
 test('editor calculation reset reuses displayed actors in both loading modes', async () => {
   for (const mode of ['scene', 'on-demand']) {
@@ -362,6 +391,25 @@ test('foreground waits for an in-flight background actor instead of creating a d
   finish(); await warm; await gate;
   assert.equal(f.take('new',b).actor,f.actors[0]); assert.equal(f.actors.length,1);
   assert.equal(f.actors[0].prepared,1,'matching warmed commands need no second prepare');
+});
+
+test('foreground missing actor takes priority over remaining speculative actors', async () => {
+  const f=fixture(); f.setMode('on-demand'); let finishFirst, finishLater;
+  f.onCreate(() => {
+    const url=f.actors.at(-1).sourceUrl;
+    if(url===a) return new Promise(resolve=>{finishFirst=resolve;});
+    if(url===b) return new Promise(resolve=>{finishLater=resolve;});
+  });
+  const warm=f.api.prewarmGltfPredictions([[{key:'first',figure:figure(a)},{key:'later',figure:figure(b)}]]);
+  while(!finishFirst) await Promise.resolve();
+  let committed=false;
+  const gate=f.hooks.prepareStage(f.state([['needed','/needed/config.json']]),f.signal()).then(()=>{committed=true;});
+  for(let i=0;i<30;i++) await Promise.resolve();
+  finishFirst();
+  while(!finishLater) await Promise.resolve();
+  assert.equal(committed,true,'foreground must not wait for the second speculative actor');
+  assert.equal(f.take('needed','/needed/config.json').actor.sourceUrl,'/needed/config.json');
+  finishLater(); await warm; await gate;
 });
 test('failed background preparation releases hidden resources, preserves active playback and can retry', async () => {
   const f=fixture(); f.setMode('on-demand');
