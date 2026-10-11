@@ -5,7 +5,7 @@ const Module = require('node:module');
 const test = require('node:test');
 const ts = require('typescript');
 
-function fixture(t) {
+function fixture(t, association = { figureId: 'actor', position: 'center' }) {
   let calculation = { showName: '', figureAssociatedAnimation: [] };
   let view = { ...calculation, currentDialogKey: 'old' };
   const writes = [], frames = new Map();
@@ -24,8 +24,8 @@ function fixture(t) {
     '@/store/store': { webgalStore: { getState: () => ({ userData: { optionData: { voiceInterruption: 0, textSpeed: 1 } } }) } },
     '@/hooks/useTextOptions': { useTextAnimationDuration: () => 0, useTextDelay: () => 10 },
     '@/Core/Modules/perform/performController': { getRandomPerformName: () => 'say-test' },
-    '@/Core/util/getSentenceArg': { getBooleanArgByKey: () => false, getFigurePositionFromArgs: () => 'center',
-      getStringArgByKey: (_, key) => key === 'figureId' ? 'actor' : null },
+    '@/Core/util/getSentenceArg': { getBooleanArgByKey: () => false, getFigurePositionFromArgs: () => association.position,
+      getStringArgByKey: (_, key) => key === 'figureId' ? association.figureId : null },
     '@/store/userDataInterface': { voiceOption: { no: 0 }, textSize: {} },
     '@/Core/WebGAL': { WebGAL: { flowchartManager: { requestUnlockCurrentScene() {} },
       events: { textSettle: { emit() {} } }, gameplay: { performController: { unmountPerform() {} },
@@ -40,9 +40,24 @@ function fixture(t) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
   } }).outputText, filename);
   return { say: () => loaded.exports.say({ content: 'Next dialogue', args: [] }), writes, frames,
+    state: () => calculation,
     frame: () => { now += 100; const [id, callback] = [...frames.entries()][0]; frames.delete(id); callback(); },
     commit: () => { view = structuredClone(calculation); }, changeDialog: () => { view.currentDialogKey = 'newer'; } };
 }
+
+test('unspecified dialogue figure clears the previous association; explicit positions and IDs are preserved', t => {
+  const association = { figureId: '', position: 'center' };
+  const f = fixture(t, association);
+  f.say(); assert.equal(f.state().dialogueFigure, 'fig-center');
+  association.position = '';
+  f.say(); assert.equal(f.state().dialogueFigure, '');
+  association.position = 'left';
+  f.say(); assert.equal(f.state().dialogueFigure, 'fig-left');
+  association.figureId = 'actor';
+  f.say(); assert.equal(f.state().dialogueFigure, 'actor');
+  association.figureId = ''; association.position = '';
+  f.say(); assert.equal(f.state().dialogueFigure, '');
+});
 
 test('pending dialogue cannot animate the visible old actor; mouth starts only after commit', t => {
   const f = fixture(t), perform = f.say();

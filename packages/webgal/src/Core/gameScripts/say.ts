@@ -201,7 +201,7 @@ export const say = (sentence: ISentence): IPerform => {
   const pos = getFigurePositionFromArgs(sentence);
 
   let key = getStringArgByKey(sentence, 'figureId') ?? '';
-  stageStateManager.setStage('dialogueFigure', key || `fig-${pos || 'center'}`);
+  stageStateManager.setStage('dialogueFigure', key || (pos ? `fig-${pos}` : ''));
 
   // 口部动画状态和ID
   let mouthAnimationState: MouthAnimationState | undefined;
