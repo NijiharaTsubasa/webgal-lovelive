@@ -92,6 +92,33 @@ test('editor fast preview crosses a called scene and returns without preparing i
   assert.equal(f.calls.includes('continue'),true);
 });
 
+test('backlog and load pass the saved cursor to reusable preparation before publishing',async()=>{
+  for (const method of ['load','backlog']) {
+    const f=fixture(), loading=f.load('Core/util/sceneCharacterLoading.ts'), saved=f.save('saved.txt',12);
+    const prepared=[]; let ready;
+    loading.registerSceneCharacterLoadingHooks({
+      prepareScene:async()=>{throw Error('whole-scene rebuild is not the restoration path');},
+      prepareStage:async()=>{throw Error('restoration prepares the stage atomically');},
+      prepareRestore:async(scene,state,line,signal)=>{
+        prepared.push([scene.sceneUrl,state.name,line,signal.aborted]);
+        await new Promise(resolve=>{ready=resolve;});
+      },
+    });
+    let pending;
+    if(method==='load') pending=f.load('Core/controller/storage/loadGame.ts').loadGameFromStageData(saved);
+    else {
+      f.backlog.push({saveScene:saved.sceneData,currentStageState:saved.nowStageState});
+      pending=f.load('Core/controller/storage/jumpFromBacklog.ts').jumpFromBacklog(0);
+    }
+    f.jobs[0].resolve('saved');
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(prepared,[['saved.txt','saved.txt',12,false]]);
+    assert.deepEqual(f.commits,[]); assert.equal(f.manager.sceneData.currentScene.sceneUrl,'old.txt');
+    ready(); await pending;
+    assert.equal(f.commits.length,1); assert.equal(f.commits[0].line,12);
+  }
+});
+
 test('cross-scene load commits only after scene identity and saved cursor are restored',async()=>{
   const f=fixture(),{loadGameFromStageData}=f.load('Core/controller/storage/loadGame.ts');
   const pending=loadGameFromStageData(f.save('saved.txt',12));
@@ -99,6 +126,22 @@ test('cross-scene load commits only after scene identity and saved cursor are re
   f.jobs[0].resolve('scene');await pending;
   assert.deepEqual(f.commits,[{url:'saved.txt',line:12,name:'saved.txt',locked:false}]);
   assert.equal(f.manager.sceneWritePromise,null);
+});
+
+test('return to a calling scene reuses restoration preparation from its continuation cursor',async()=>{
+  const f=fixture(), loading=f.load('Core/util/sceneCharacterLoading.ts'),prepared=[];
+  f.manager.sceneData.sceneStack.push({sceneUrl:'parent.txt',sceneName:'parent',continueLine:4,locals:{parent:1}});
+  loading.registerSceneCharacterLoadingHooks({
+    prepareScene:async()=>{throw Error('return must not rebuild the completed prefix');},
+    prepareStage:async()=>{},
+    prepareRestore:async(scene,state,line)=>prepared.push([scene.sceneUrl,line,state.name]),
+  });
+  const pending=f.load('Core/controller/scene/returnFromScene.ts').returnFromScene();
+  f.jobs[0].resolve('parent');await pending;
+  assert.deepEqual(prepared,[['parent.txt',5,'old']]);
+  assert.equal(f.manager.sceneData.currentSentenceId,5);
+  assert.equal(f.manager.sceneData.sceneStack.length,0);
+  assert.equal(f.calls.includes('continue'),true);
 });
 
 test('reset during an in-flight write unlocks a new scene and rejects the old response',async()=>{

@@ -3,13 +3,13 @@ import { sceneFetcher } from './sceneFetcher';
 import { sceneParser } from '@/Core/parser/sceneParser';
 import type { IScene } from './sceneInterface';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
-import { beginCharacterLoading, prepareSceneCharacters } from '@/Core/util/sceneCharacterLoading';
+import { beginCharacterLoading, prepareSceneCharacters, prepareRestoredCharacters } from '@/Core/util/sceneCharacterLoading';
 import { cancelPendingForward, continueSentence } from '@/Core/controller/gamePlay/nextSentence';
 import { logger } from '@/Core/util/logger';
 import cloneDeep from 'lodash/cloneDeep';
 
 /** Publish scene identity, stack and cursor only after preparation succeeds. */
-export function prepareSceneWrite(url: string, name: string, publish: (scene: IScene) => void): Promise<void> | undefined {
+export function prepareSceneWrite(url: string, name: string, publish: (scene: IScene) => void, restoreLine?: number): Promise<void> | undefined {
   const manager = WebGAL.sceneManager;
   if (manager.lockSceneWrite) return;
   manager.lockSceneWrite = true;
@@ -24,7 +24,9 @@ export function prepareSceneWrite(url: string, name: string, publish: (scene: IS
     const scene = sceneParser(raw, name, url);
     // Editor fast preview prepares only the final displayed stage in commitForward.
     if (!fastPreview) {
-      await prepareSceneCharacters(scene, cloneDeep(stageStateManager.getCalculationStageState()), ticket.signal);
+      const state = cloneDeep(stageStateManager.getCalculationStageState());
+      if (restoreLine === undefined) await prepareSceneCharacters(scene, state, ticket.signal);
+      else await prepareRestoredCharacters(scene, state, restoreLine, ticket.signal);
     }
     if (manager.sceneWritePromise !== pending || !ticket.isCurrent()) return;
     publish(scene);
@@ -32,7 +34,7 @@ export function prepareSceneWrite(url: string, name: string, publish: (scene: IS
   }).catch(error => {
     if (manager.sceneWritePromise !== pending || !ticket.isCurrent()) return;
     logger.error('场景准备失败', error);
-    ticket.fail(error, () => prepareSceneWrite(url, name, publish));
+    ticket.fail(error, () => prepareSceneWrite(url, name, publish, restoreLine));
   }).finally(async () => {
     if (manager.sceneWritePromise !== pending) return;
     manager.sceneWritePromise = null;

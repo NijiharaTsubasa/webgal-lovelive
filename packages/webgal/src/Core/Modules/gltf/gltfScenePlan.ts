@@ -20,7 +20,7 @@ const gltfUrl = (value: string) => /\/config\.json(?:[?#].*)?$/.test(value);
 const MAX_SCENE_STATES = 20000;
 
 /** Traverse static in-scene paths without executing variables or visiting other scenes. */
-export function planGltfSceneResidency(scene: IScene, state: IStageState) {
+export function planGltfSceneResidency(scene: IScene, state: IStageState, startLine = 0) {
   const lines = scene.sentenceList;
   const labels = new Map<string, number>();
   lines.forEach((sentence, line) => {
@@ -29,7 +29,8 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState) {
   type Figures = Map<string, ProjectedGltfFigure>;
   interface PathState { line: number; figures: Figures; slots: Map<string, number> }
   const seed = seedGltfFigures(state);
-  const queue: PathState[] = lines.length ? [{ line: 0, figures: seed, slots: new Map() }] : [];
+  const initial: PathState = { line: startLine, figures: seed, slots: new Map() };
+  const queue: PathState[] = startLine < lines.length ? [initial] : [];
   const visited = new Set<string>();
   const appearances = new Map<string, GltfSceneAppearance>();
   const named = new Map<string, { kind: 'motion' | 'expression'; name: string }>();
@@ -76,6 +77,8 @@ export function planGltfSceneResidency(scene: IScene, state: IStageState) {
     if (destination <= line) unsafeRelease = true;
     enqueue(destination, path.figures, path.slots);
   };
+  // A saved stage precedes the next script line, which may immediately replace it.
+  if (startLine > 0 || !lines.length) commit(startLine - 1, initial);
   for (let cursor = 0; cursor < queue.length; cursor++) {
     if (visited.size >= MAX_SCENE_STATES) { truncated = true; unsafeRelease = true; break; }
     const path = queue[cursor], line = path.line, sentence = lines[line];

@@ -3,7 +3,7 @@ import { type IStageState } from '@/Core/Modules/stage/stageInterface';
 import { WebGAL } from '@/Core/WebGAL';
 import { registerSceneCharacterLoadingHooks, getCharacterLoadingMode } from '@/Core/util/sceneCharacterLoading';
 import type { ProjectedGltfFigure } from './gltfFigureState';
-import { planGltfSceneResidency, gltfFigureIdentity } from './gltfScenePlan';
+import { planGltfSceneResidency, gltfFigureIdentity, type GltfSceneAppearance } from './gltfScenePlan';
 import { characterOptions, GltfCharacterRuntime, preloadGltfNamedResources, areGltfNamedResourcesReady } from './gltfCharacter';
 import { resolveFigureConfig } from './fixedGltfResources';
 import { seedGltfFigures } from './gltfFigureState';
@@ -100,8 +100,8 @@ async function addResident(owner: Residency, slot: number, key: string, figure: 
   return record;
 }
 
-async function prepareScene(scene: IScene, state: IStageState, signal: AbortSignal) {
-  const plan = planGltfSceneResidency(scene, state);
+async function prepareScene(scene: IScene, state: IStageState, signal: AbortSignal, startLine = 0) {
+  const plan = planGltfSceneResidency(scene, state, startLine);
   const owner: Residency = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'scene', sceneUrl: scene.sceneUrl };
   try {
     await preloadGltfNamedResources(plan.named);
@@ -120,6 +120,90 @@ async function prepareScene(scene: IScene, state: IStageState, signal: AbortSign
     prepared.clear();
     retire(previous);
   } catch (error) { retire(owner); throw error; }
+}
+
+async function prepareRestore(scene: IScene, state: IStageState, line: number, signal: AbortSignal) {
+  if (getCharacterLoadingMode() !== 'scene') {
+    if (tryPrepareStage(state, signal) || await prepareDisplayedStage(state, signal)) return;
+    return prepareStage(state, signal);
+  }
+  const owner = current;
+  if (!owner || owner.retired || owner.mode !== 'scene') {
+    await prepareScene(scene, state, signal, line);
+    return prepareStage(state, signal);
+  }
+  const plan = planGltfSceneResidency(scene, state, line);
+  const originals = new Map(owner.residents.map(record => [record, record.lastUse]));
+  const originalSurfaces = new Set(owner.surfaces);
+  const originalUrl = owner.sceneUrl;
+  const lastUses = new Map<Resident, number>();
+  const slotMapping = new Map<number, number>(), used = new Set<number>();
+  // Rebind plan slots to existing contexts, preferring the currently displayed actor.
+  const groups = new Map<number, GltfSceneAppearance[]>();
+  for (const appearance of plan.appearances.values()) {
+    const group = groups.get(appearance.slot) ?? [];
+    group.push(appearance); groups.set(appearance.slot, group);
+  }
+  try {
+    await preloadGltfNamedResources(plan.named);
+    assertCurrent(signal);
+    for (const [slot, group] of groups) {
+      const candidates = owner.residents.filter(record => !used.has(record.slot) && record.runtime.isReady
+        && group.some(({key, figure}) => record.identity === gltfFigureIdentity(key, figure)));
+      const preferred = candidates.find(record => owner.active.has(record)) ?? candidates[0];
+      if (preferred) { slotMapping.set(slot, preferred.slot); used.add(preferred.slot); }
+    }
+    for (const slot of groups.keys()) if (!slotMapping.has(slot)) {
+      let actual = 0;
+      while (used.has(actual) || [...owner.active].some(record => record.slot === actual)) actual++;
+      slotMapping.set(slot, actual); used.add(actual);
+    }
+    // Protect retained residents against the old playback cursor while rewinding.
+    for (const record of owner.residents) record.lastUse = Infinity;
+    for (const {slot, key, figure, lastUse} of plan.appearances.values()) {
+      assertCurrent(signal);
+      const actual = slotMapping.get(slot)!;
+      const identity = gltfFigureIdentity(key, figure);
+      let record = owner.residents.find(item => item.identity === identity && item.slot === actual && item.runtime.isReady);
+      if (!record && await isGltfConfig(figure.url)) {
+        const active = [...owner.active].find(item => item.slot === actual);
+        if (active) { active.runtime.suspend(); owner.surfaces[actual].deactivate(active.actor); }
+        try {
+          record = await addResident(owner, actual, key, figure, signal);
+          record.backgroundReady = true;
+          record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
+        } finally {
+          if (active) {
+            owner.surfaces[actual].activate(active.actor); active.runtime.activate(); active.runtime.update(0);
+          }
+        }
+      }
+      if (record) lastUses.set(record, Math.max(lastUses.get(record) ?? -1, lastUse));
+    }
+    assertCurrent(signal);
+    if (!tryPrepareStage(state, signal) && !await prepareDisplayedStage(state, signal)) await prepareStage(state, signal);
+    assertCurrent(signal);
+    owner.sceneUrl = scene.sceneUrl;
+    for (const record of [...owner.residents]) {
+      record.lastUse = lastUses.get(record) ?? line - 1;
+      if (!lastUses.has(record) && !owner.active.has(record) && prepared.get(record.identity) !== record) releaseResident(owner, record);
+    }
+  } catch (error) {
+    prepared.clear(); owner.sceneUrl = originalUrl;
+    for (const record of [...owner.residents]) {
+      if (originals.has(record)) record.lastUse = originals.get(record)!;
+      else releaseResident(owner, record);
+    }
+    owner.surfaces.forEach((surface, slot) => {
+      if (surface && !originalSurfaces.has(surface) && !owner.residents.some(record => record.slot === slot)) {
+        surface.dispose(); delete owner.surfaces[slot];
+      }
+    });
+    for (const active of owner.active) {
+      owner.surfaces[active.slot].activate(active.actor); active.runtime.activate(); active.runtime.update(0);
+    }
+    throw error;
+  }
 }
 
 async function prepareStage(state: IStageState, signal: AbortSignal) {
@@ -406,5 +490,9 @@ registerSceneCharacterLoadingHooks({
     return serialize(() => prepareStage(state, signal));
   },
   prepareScene: (scene, state, signal) => { prediction?.abort(); return serialize(() => prepareScene(scene, state, signal)); },
+  prepareRestore: (scene, state, line, signal) => {
+    prediction?.abort(); predictionSignature = '';
+    return serialize(() => prepareRestore(scene, state, line, signal));
+  },
   releaseScene,
 });

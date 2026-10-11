@@ -6,7 +6,7 @@ import { sceneFetcher } from '../scene/sceneFetcher';
 import { sceneParser } from '@/Core/parser/sceneParser';
 import { logger } from '@/Core/util/logger';
 import { cancelPendingForward } from '@/Core/controller/gamePlay/nextSentence';
-import { beginCharacterLoading, prepareSceneCharacters, prepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
+import { beginCharacterLoading, prepareRestoredCharacters } from '@/Core/util/sceneCharacterLoading';
 
 /** Prepare the saved scene and complete stage before publishing either. */
 export function restoreStageScene(saved: ISaveScene, applyStage: () => void, refetch = true, stage?: IStageState): Promise<void> {
@@ -21,9 +21,7 @@ export function restoreStageScene(saved: ISaveScene, applyStage: () => void, ref
     .then(async scene => {
       if (manager.sceneWritePromise !== pending || !ticket.isCurrent()) return;
       if (stageSnapshot) {
-        await prepareSceneCharacters(scene, stageSnapshot, ticket.signal);
-        if (!ticket.isCurrent()) return;
-        await prepareStageCharacters(stageSnapshot, ticket.signal);
+        await prepareRestoredCharacters(scene, stageSnapshot, snapshot.currentSentenceId, ticket.signal);
       }
       if (manager.sceneWritePromise !== pending || !ticket.isCurrent()) return;
       manager.sceneData.currentScene = scene;

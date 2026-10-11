@@ -36,6 +36,20 @@ const scene = list => ({sceneUrl:'test.txt',sentenceList:list});
 const plan = (list,state=empty()) => planGltfSceneResidency(scene(list),state);
 const names = result => new Set([...result.appearances.values()].map(item => item.figure.url));
 
+test('saved cursor discovery retains the saved stage and skips the completed prefix', () => {
+ const state=empty(); state.figName='game/saved/config.json';
+ const result=planGltfSceneResidency(scene([figure('past'),say(),figure('future'),say()]),state,2);
+ assert.deepEqual([...names(result)].sort(),['game/future/config.json','game/saved/config.json']);
+ const atEnd=planGltfSceneResidency(scene([figure('past'),say()]),state,2);
+ assert.deepEqual([...names(atEnd)],['game/saved/config.json']);
+});
+
+test('saved cursor discovery still follows explicit backward jumps', () => {
+ const result=planGltfSceneResidency(scene([sentence(C.label,'back'),figure('past'),say(),sentence(C.jumpLabel,'back')]),empty(),3);
+ assert.deepEqual([...names(result)],['game/past/config.json']);
+ assert.equal(result.canRelease,false);
+});
+
 test('scene discovery continues across variables and user input without executing scripts', () => {
  const state=empty(); const result=plan([sentence(C.setVar,'throw new Error("must not execute")'),figure('a',{next:true}),say(),sentence(C.getUserInput,'answer'),figure('b',{right:true,next:true}),say()],state);
  assert.equal(result.capacity,2); assert.equal(names(result).size,2); assert.equal(state.figName,''); assert.equal(result.truncated,false);

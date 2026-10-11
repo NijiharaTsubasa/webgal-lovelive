@@ -88,6 +88,8 @@ function fixture() {
   };
   const realPrepareScene = hooks.prepareScene;
   hooks.prepareScene = (input,state,signal) => realPrepareScene(scene(input.sceneUrl),state,signal);
+  const realPrepareRestore = hooks.prepareRestore;
+  hooks.prepareRestore = (input,state,line,signal) => realPrepareRestore(scene(input.sceneUrl),state,line,signal);
   return {api,hooks,actors,surfaces,displayed,state,signal,take,sceneData,C,sentence,checks,
     setMode(value) {mode=value;}, setPlan(value) {plan=value;}, failPrepare() {prepareFailure = Error('fixture preparation failed');},
     onPrepare(fn) {onPrepare=fn;},
@@ -95,6 +97,81 @@ function fixture() {
   };
 }
 const a = '/a/config.json', b = '/b/config.json';
+
+test('restoring the current scene or another scene reuses the displayed group without GPU preparation', async () => {
+  const f = fixture();
+  const items = Array.from({length:8}, (_, i) => [`actor${i}`, `/actor${i}/config.json`]);
+  const stage = f.state(items);
+  await f.hooks.prepareStage(stage, f.signal());
+  const runtimes = items.map(([key,url]) => f.take(key,url));
+  f.setPlan({sentenceList:[f.sentence(f.C.say,'current'),f.sentence(f.C.say,'next')]});
+  for (const sceneUrl of ['scene.txt','another.txt']) {
+    const preparations = f.actors.map(actor => actor.prepared);
+    await f.hooks.prepareRestore({sceneUrl},stage,1,f.signal());
+    assert.equal(f.actors.length,8);
+    assert.deepEqual(f.actors.map(actor => actor.prepared),preparations);
+    assert.ok(runtimes.every(runtime => runtime.isActive && !runtime.actor.disposed));
+  }
+});
+
+test('restoration preloads only reachable future models, retaining an unchanged actor', async () => {
+  const f = fixture(), stage = f.state([['actor',a]]);
+  await f.hooks.prepareStage(stage,f.signal());
+  const active = f.take('actor',a);
+  f.setPlan({sentenceList:[f.sentence(f.C.changeFigure,'/past/config.json',{id:'past'}),
+    f.sentence(f.C.say,'past'),f.sentence(f.C.say,'saved'),
+    f.sentence(f.C.changeFigure,b,{id:'actor'}),f.sentence(f.C.say,'future')]});
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},stage,3,f.signal());
+  assert.equal(f.actors.length,2);
+  assert.ok(f.actors.every(actor => actor.sourceUrl !== '/past/config.json'));
+  assert.equal(active.actor.surface.active,active.actor);
+  assert.equal(active.isActive,true);
+  await f.hooks.prepareStage(f.state([['actor',b]]),f.signal());
+  assert.equal(f.take('actor',b).actor,f.actors[1]);
+});
+
+test('cancelled restoration discards new residents and preserves the displayed group', async () => {
+  const f = fixture(), stage = f.state([['actor',a]]);
+  await f.hooks.prepareStage(stage,f.signal());
+  const active = f.take('actor',a), controller = new AbortController();
+  f.setPlan({batches:[[{key:'actor',figure:{url:b,position:'center',bounds:[0,0,1,1]}}]]});
+  f.onCreate(() => controller.abort());
+  await assert.rejects(f.hooks.prepareRestore({sceneUrl:'next.txt'},stage,0,controller.signal),/Cancelled/);
+  assert.equal(active.actor.disposed,false);
+  assert.equal(active.isActive,true);
+  assert.equal(active.actor.surface.active,active.actor);
+  assert.ok(f.actors.slice(1).every(actor => actor.disposed));
+});
+
+test('rewinding protects future residents from the old cursor and prepares changed commands without changing the displayed pose', async () => {
+  const f=fixture(), stage=f.state([['actor',a]]);
+  f.setPlan({batches:[[{key:'actor',figure:{url:a,position:'center',bounds:[0,0,1,1],motion:'old'}}],
+    [{key:'actor',figure:{url:b,position:'center',bounds:[0,0,1,1]}}]]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  stage.live2dMotion=[{target:'actor',motion:'old'}];
+  await f.hooks.prepareStage(stage,f.signal()); const active=f.take('actor',a);
+  f.sceneData.currentSentenceId=100;
+  const restored=f.state([['actor',a]]); restored.live2dMotion=[{target:'actor',motion:'new'}];
+  f.setPlan({sentenceList:[f.sentence(f.C.say,'earlier'),f.sentence(f.C.changeFigure,b,{id:'actor'}),f.sentence(f.C.say,'later')]});
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},restored,1,f.signal());
+  assert.equal(f.actors.length,2);
+  assert.equal(active.motion,'old','saved commands become visible only when the stage commits');
+  assert.equal(f.actors[1].disposed,false,'the old cursor must not evict a future resident while rewinding');
+});
+
+test('failed restored-stage preparation releases only new actors and allows retry', async () => {
+  const f=fixture(); await f.hooks.prepareStage(f.state([['actor',a]]),f.signal());
+  const active=f.take('actor',a);
+  const restored=f.state([['actor',b]]); restored.live2dMotion=[{target:'actor',motion:'saved'}];
+  f.setPlan({sentenceList:[f.sentence(f.C.changeFigure,b,{id:'actor',motion:'future'}),f.sentence(f.C.say,'future')]});
+  f.failPrepare();
+  await assert.rejects(f.hooks.prepareRestore({sceneUrl:'new.txt'},restored,0,f.signal()),/fixture preparation failed/);
+  assert.equal(active.actor.disposed,false); assert.equal(active.isActive,true);
+  assert.equal(active.actor.surface.active,active.actor);
+  assert.ok(f.actors.slice(1).every(actor=>actor.disposed));
+  await f.hooks.prepareRestore({sceneUrl:'new.txt'},restored,0,f.signal());
+  assert.ok(f.api.hasPreparedGltfCharacter('actor',b,'center',[0,0,1,1]));
+});
 
 test('unchanged nine-actor dialogue and textbox changes reuse readiness without resource checks in both modes', async () => {
   for (const mode of ['scene', 'on-demand']) {

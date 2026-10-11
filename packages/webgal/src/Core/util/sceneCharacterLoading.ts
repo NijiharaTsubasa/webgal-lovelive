@@ -12,6 +12,7 @@ export interface SceneCharacterLoadingHooks {
   tryPrepareStage?(stage: IStageState, signal: AbortSignal): boolean;
   prepareStage(stage: IStageState, signal: AbortSignal): Promise<void>;
   prepareScene(scene: IScene, state: IStageState, signal: AbortSignal): Promise<void>;
+  prepareRestore?(scene: IScene, state: IStageState, line: number, signal: AbortSignal): Promise<void>;
   releaseScene?(): void;
 }
 let hooks: SceneCharacterLoadingHooks | undefined;
@@ -75,4 +76,10 @@ export function tryPrepareStageCharacters(stage: IStageState, signal: AbortSigna
 export async function prepareSceneCharacters(scene: IScene, state: IStageState, signal: AbortSignal) {
   if (signal.aborted || mode !== 'scene') return;
   await hooks?.prepareScene(scene, state, signal);
+}
+export async function prepareRestoredCharacters(scene: IScene, state: IStageState, line: number, signal: AbortSignal) {
+  if (signal.aborted) return;
+  if (hooks?.prepareRestore) return hooks.prepareRestore(scene, state, line, signal);
+  await prepareSceneCharacters(scene, state, signal);
+  await prepareStageCharacters(state, signal);
 }

@@ -7,4 +7,4 @@ export const restoreScene = (entry: ISceneEntry, beforePublish?: () => void) =>
     beforePublish?.();
     WebGAL.sceneManager.sceneData.currentScene = scene;
     WebGAL.sceneManager.sceneData.currentSentenceId = entry.continueLine + 1;
-  });
+  }, entry.continueLine + 1);
