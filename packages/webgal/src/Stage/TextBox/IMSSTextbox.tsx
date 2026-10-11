@@ -270,6 +270,7 @@ export default function IMSSTextbox(props: ITextboxProps) {
                     opacity: `${textboxOpacity / 100}`,
                     fontSize: '200%',
                   }}
+                  data-nameplate={props.nameplate}
                 >
                   <span style={{ opacity: 0 }}>{nameElementList}</span>
                 </div>

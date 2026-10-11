@@ -1,0 +1,75 @@
+.Choose_Main {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-flow: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 13;
+  background: transparent;
+  row-gap: 2em;
+}
+
+.Choose_item_outer {
+  min-width: 60%;
+  height: 136px;
+  padding: 0;
+  margin: 0.5rem 0;
+  background: transparent;
+  animation: llasChoiceAppear 350ms ease forwards;
+}
+
+.Choose_item {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 72px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: url('game/template/assets/llas-choice-background.png') center / 100% 100% no-repeat;
+  color: #3c3c4b;
+  font-size: 200%;
+  font-weight: normal;
+  text-align: center;
+  text-shadow: 1px 1px white;
+  transition: filter 150ms ease;
+  cursor: pointer;
+
+  &:hover { filter: brightness(1.05); }
+}
+
+.Choose_item_disabled {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 72px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: url('game/template/assets/llas-choice-background.png') center / 100% 100% no-repeat;
+  color: #3c3c4b;
+  font-size: 200%;
+  font-weight: normal;
+  text-align: center;
+  text-shadow: 1px 1px white;
+  transition: filter 150ms ease;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@keyframes llasChoiceAppear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

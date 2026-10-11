@@ -19,4 +19,5 @@ export interface ITextboxProps {
   lineLimit: number;
   isUseStroke: boolean;
   textboxOpacity: number;
+  nameplate?: string;
 }

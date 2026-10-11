@@ -1,0 +1,332 @@
+.TextBox_main {
+  position: absolute;
+  z-index: 3;
+  left: 17.39%;
+  right: 17.39%;
+  bottom: 0;
+  min-height: 428px;
+  max-height: 428px;
+  box-sizing: border-box;
+  padding: 123px 0 29px;
+  display: flex;
+  flex-flow: column;
+  align-items: flex-start;
+  color: #454545;
+  font-weight: normal;
+  letter-spacing: normal;
+
+  &[data-auto='true']::after {
+    content: 'AUTO';
+    position: absolute;
+    right: -200px;
+    bottom: 56px;
+    color: #454545;
+    font-size: 32px;
+  }
+}
+
+.TextBox_main_miniavatarOff {
+  left: 17.39%;
+}
+
+.TextBox_Background {
+  z-index: 2;
+  left: 0 !important;
+  right: 0;
+  padding: 0;
+  pointer-events: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: -16.42%;
+    top: 36px;
+    width: 132.84%;
+    height: 491px;
+    box-sizing: border-box;
+    border-style: solid;
+    border-color: transparent;
+    border-width: 38px 274px 234px;
+    border-image: url('game/template/assets/llas-dialog-background.png') 20 143 122 143 fill stretch;
+  }
+
+  &[data-waiting='true']::before {
+    content: '';
+    position: absolute;
+    right: 12.52%;
+    bottom: 61px;
+    width: 65px;
+    height: 58px;
+    z-index: 1;
+    background: url('game/template/assets/llas-dialog-next.png') center / contain no-repeat;
+    animation: llas-next 1s ease-in-out infinite;
+  }
+}
+
+.TextBox_showName {
+  position: absolute;
+  left: -184px;
+  top: 0;
+  width: 844px;
+  height: 92px;
+  padding: 0 69px 0 146px;
+  box-sizing: border-box;
+  line-height: 92px;
+  font-size: 52px !important;
+  font-weight: bold;
+  z-index: 3;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.TextBox_ShowName_Background {
+  z-index: 2;
+  background: url('game/template/assets/llas-dialog-name.png') center / 100% 100% no-repeat;
+
+  &[data-nameplate='llas-ch0001'] {
+    background-image: url('game/template/assets/nameplates/ch0001.png');
+  }
+
+  &[data-nameplate='llas-ch0002'] {
+    background-image: url('game/template/assets/nameplates/ch0002.png');
+  }
+
+  &[data-nameplate='llas-ch0003'] {
+    background-image: url('game/template/assets/nameplates/ch0003.png');
+  }
+
+  &[data-nameplate='llas-ch0004'] {
+    background-image: url('game/template/assets/nameplates/ch0004.png');
+  }
+
+  &[data-nameplate='llas-ch0005'] {
+    background-image: url('game/template/assets/nameplates/ch0005.png');
+  }
+
+  &[data-nameplate='llas-ch0006'] {
+    background-image: url('game/template/assets/nameplates/ch0006.png');
+  }
+
+  &[data-nameplate='llas-ch0007'] {
+    background-image: url('game/template/assets/nameplates/ch0007.png');
+  }
+
+  &[data-nameplate='llas-ch0008'] {
+    background-image: url('game/template/assets/nameplates/ch0008.png');
+  }
+
+  &[data-nameplate='llas-ch0009'] {
+    background-image: url('game/template/assets/nameplates/ch0009.png');
+  }
+
+  &[data-nameplate='llas-ch0101'] {
+    background-image: url('game/template/assets/nameplates/ch0101.png');
+  }
+
+  &[data-nameplate='llas-ch0102'] {
+    background-image: url('game/template/assets/nameplates/ch0102.png');
+  }
+
+  &[data-nameplate='llas-ch0103'] {
+    background-image: url('game/template/assets/nameplates/ch0103.png');
+  }
+
+  &[data-nameplate='llas-ch0104'] {
+    background-image: url('game/template/assets/nameplates/ch0104.png');
+  }
+
+  &[data-nameplate='llas-ch0105'] {
+    background-image: url('game/template/assets/nameplates/ch0105.png');
+  }
+
+  &[data-nameplate='llas-ch0106'] {
+    background-image: url('game/template/assets/nameplates/ch0106.png');
+  }
+
+  &[data-nameplate='llas-ch0107'] {
+    background-image: url('game/template/assets/nameplates/ch0107.png');
+  }
+
+  &[data-nameplate='llas-ch0108'] {
+    background-image: url('game/template/assets/nameplates/ch0108.png');
+  }
+
+  &[data-nameplate='llas-ch0109'] {
+    background-image: url('game/template/assets/nameplates/ch0109.png');
+  }
+
+  &[data-nameplate='llas-ch0201'] {
+    background-image: url('game/template/assets/nameplates/ch0201.png');
+  }
+
+  &[data-nameplate='llas-ch0202'] {
+    background-image: url('game/template/assets/nameplates/ch0202.png');
+  }
+
+  &[data-nameplate='llas-ch0203'] {
+    background-image: url('game/template/assets/nameplates/ch0203.png');
+  }
+
+  &[data-nameplate='llas-ch0204'] {
+    background-image: url('game/template/assets/nameplates/ch0204.png');
+  }
+
+  &[data-nameplate='llas-ch0205'] {
+    background-image: url('game/template/assets/nameplates/ch0205.png');
+  }
+
+  &[data-nameplate='llas-ch0206'] {
+    background-image: url('game/template/assets/nameplates/ch0206.png');
+  }
+
+  &[data-nameplate='llas-ch0207'] {
+    background-image: url('game/template/assets/nameplates/ch0207.png');
+  }
+
+  &[data-nameplate='llas-ch0208'] {
+    background-image: url('game/template/assets/nameplates/ch0208.png');
+  }
+
+  &[data-nameplate='llas-ch0209'] {
+    background-image: url('game/template/assets/nameplates/ch0209.png');
+  }
+
+  &[data-nameplate='llas-ch0210'] {
+    background-image: url('game/template/assets/nameplates/ch0210.png');
+  }
+
+  &[data-nameplate='llas-ch0211'] {
+    background-image: url('game/template/assets/nameplates/ch0211.png');
+  }
+
+  &[data-nameplate='llas-ch0212'] {
+    background-image: url('game/template/assets/nameplates/ch0212.png');
+  }
+  &[data-nameplate='hasunosora-1021'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1021.png');
+  }
+
+  &[data-nameplate='hasunosora-1022'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1022.png');
+  }
+
+  &[data-nameplate='hasunosora-1023'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1023.png');
+  }
+
+  &[data-nameplate='hasunosora-1031'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1031.png');
+  }
+
+  &[data-nameplate='hasunosora-1032'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1032.png');
+  }
+
+  &[data-nameplate='hasunosora-1033'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1033.png');
+  }
+
+  &[data-nameplate='hasunosora-1041'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1041.png');
+  }
+
+  &[data-nameplate='hasunosora-1042'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1042.png');
+  }
+
+  &[data-nameplate='hasunosora-1043'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1043.png');
+  }
+
+  &[data-nameplate='hasunosora-1051'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1051.png');
+  }
+
+  &[data-nameplate='hasunosora-1052'] {
+    background-image: url('game/template/assets/nameplates/hasunosora-1052.png');
+  }
+
+  &[data-nameplate='mygo'] {
+    background-image: url('game/template/assets/nameplates/mygo.png');
+  }
+
+  &[data-nameplate='ave-mujica'] {
+    background-image: url('game/template/assets/nameplates/ave-mujica.png');
+  }
+
+}
+
+.outerName {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #454545;
+  z-index: 2;
+}
+
+.innerName {
+  display: none;
+}
+
+.text {
+  width: 100%;
+  line-height: 1.6em !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.outer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  color: #454545;
+  z-index: 2;
+}
+
+.inner {
+  display: none;
+}
+
+.readTextOuter {
+  color: #777777;
+}
+
+.TextBox_textElement_start {
+  position: relative;
+  opacity: 0;
+  display: inline-flex;
+  animation: llas-text-in 0.2s ease-out forwards;
+}
+
+.TextBox_textElement_Settled {
+  position: relative;
+  opacity: 1;
+  display: inline-flex;
+}
+
+.miniAvatarContainer {
+  position: absolute;
+  height: 380px;
+  width: 300px;
+  bottom: 420px;
+  left: -300px;
+  overflow: hidden;
+}
+
+.miniAvatarImg {
+  max-height: 100%;
+  max-width: 100%;
+  position: absolute;
+  bottom: 0;
+}
+
+@keyframes llas-next {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+
+@keyframes llas-text-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

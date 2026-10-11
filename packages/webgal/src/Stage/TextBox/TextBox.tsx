@@ -10,6 +10,7 @@ import IMSSTextbox from '@/Stage/TextBox/IMSSTextbox';
 // import { SCREEN_CONSTANTS } from '@/Core/util/constants';
 import useEscape from '@/hooks/useEscape';
 import { useStageState } from '@/hooks/useStageState';
+import { resolveNameplate } from './nameplate';
 
 import { WebGAL } from '@/Core/WebGAL';
 
@@ -109,6 +110,7 @@ export const TextBox = () => {
       lineLimit={lineLimit}
       isUseStroke={isShowStroke}
       textboxOpacity={textboxOpacity}
+      nameplate={resolveNameplate(stageState, WebGAL.template?.['nameplate-rules'])}
     />
   );
 };

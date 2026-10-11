@@ -1,0 +1,94 @@
+.CharacterLoading_sceneIndicator {
+  position: absolute;
+  right: 64px;
+  bottom: 24px;
+  text-align: right;
+}
+
+.CharacterLoading_sceneImage {
+  position: relative;
+  width: 350px;
+  height: 77px;
+  font-family: '江城圆体', sans-serif;
+  font-size: 50px;
+  font-weight: bold;
+  line-height: 77px;
+  color: white;
+
+  &::before {
+    content: 'Now Loading';
+    position: absolute;
+    top: 0;
+    right: 1.2em;
+    white-space: nowrap;
+    text-shadow: -4px -4px 3px #00000080, 4px -4px 3px #00000080,
+      -4px 4px 3px #00000080, 4px 4px 3px #00000080;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -0.12em;
+    width: 1.2em;
+    text-align: left;
+    letter-spacing: 0.206em;
+    font-kerning: none;
+    font-variant-ligatures: none;
+    white-space: nowrap;
+    text-shadow: -3px -3px 2px #00000080, 3px -3px 2px #00000080,
+      -3px 3px 2px #00000080, 3px 3px 2px #00000080;
+    animation: llas-loading-dots 2s step-end infinite;
+  }
+}
+
+.CharacterLoading_stageIndicator {
+  position: absolute;
+  right: 64px;
+  bottom: 24px;
+  text-align: right;
+}
+
+.CharacterLoading_stageImage {
+  position: relative;
+  width: 350px;
+  height: 77px;
+  font-family: '江城圆体', sans-serif;
+  font-size: 50px;
+  font-weight: bold;
+  line-height: 77px;
+  color: white;
+
+  &::before {
+    content: 'Now Loading';
+    position: absolute;
+    top: 0;
+    right: 1.2em;
+    white-space: nowrap;
+    text-shadow: -4px -4px 3px #00000080, 4px -4px 3px #00000080,
+      -4px 4px 3px #00000080, 4px 4px 3px #00000080;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -0.12em;
+    width: 1.2em;
+    text-align: left;
+    letter-spacing: 0.206em;
+    font-kerning: none;
+    font-variant-ligatures: none;
+    white-space: nowrap;
+    text-shadow: -3px -3px 2px #00000080, 3px -3px 2px #00000080,
+      -3px 3px 2px #00000080, 3px 3px 2px #00000080;
+    animation: llas-loading-dots 2s step-end infinite;
+  }
+}
+
+@keyframes llas-loading-dots {
+  0%, 100% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}

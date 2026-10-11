@@ -21,5 +21,6 @@ export interface WebgalTemplate {
   id?: string;
   'webgal-version': string;
   fonts?: TemplateFontDescriptor[];
+  'nameplate-rules'?: { keywords: string[]; style: string }[];
   [key: string]: unknown;
 }

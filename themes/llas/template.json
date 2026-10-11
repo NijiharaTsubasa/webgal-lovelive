@@ -1,0 +1,281 @@
+{
+  "name": "LoveLive! All Stars Theme",
+  "webgal-version": "4.6.4",
+  "webgal-mygo-version": "3.2.1",
+  "fonts": [
+    {
+      "font-family": "江城圆体",
+      "url": "assets/fonts/JiangChengYuanTi/JiangChengYuanTi_500W.ttf",
+      "type": "truetype"
+    }
+  ],
+  "nameplate-rules": [
+    {
+      "keywords": [
+        "/ch0001_"
+      ],
+      "style": "llas-ch0001"
+    },
+    {
+      "keywords": [
+        "/ch0002_"
+      ],
+      "style": "llas-ch0002"
+    },
+    {
+      "keywords": [
+        "/ch0003_"
+      ],
+      "style": "llas-ch0003"
+    },
+    {
+      "keywords": [
+        "/ch0004_"
+      ],
+      "style": "llas-ch0004"
+    },
+    {
+      "keywords": [
+        "/ch0005_"
+      ],
+      "style": "llas-ch0005"
+    },
+    {
+      "keywords": [
+        "/ch0006_"
+      ],
+      "style": "llas-ch0006"
+    },
+    {
+      "keywords": [
+        "/ch0007_"
+      ],
+      "style": "llas-ch0007"
+    },
+    {
+      "keywords": [
+        "/ch0008_"
+      ],
+      "style": "llas-ch0008"
+    },
+    {
+      "keywords": [
+        "/ch0009_"
+      ],
+      "style": "llas-ch0009"
+    },
+    {
+      "keywords": [
+        "/ch0101_"
+      ],
+      "style": "llas-ch0101"
+    },
+    {
+      "keywords": [
+        "/ch0102_"
+      ],
+      "style": "llas-ch0102"
+    },
+    {
+      "keywords": [
+        "/ch0103_"
+      ],
+      "style": "llas-ch0103"
+    },
+    {
+      "keywords": [
+        "/ch0104_"
+      ],
+      "style": "llas-ch0104"
+    },
+    {
+      "keywords": [
+        "/ch0105_"
+      ],
+      "style": "llas-ch0105"
+    },
+    {
+      "keywords": [
+        "/ch0106_"
+      ],
+      "style": "llas-ch0106"
+    },
+    {
+      "keywords": [
+        "/ch0107_"
+      ],
+      "style": "llas-ch0107"
+    },
+    {
+      "keywords": [
+        "/ch0108_"
+      ],
+      "style": "llas-ch0108"
+    },
+    {
+      "keywords": [
+        "/ch0109_"
+      ],
+      "style": "llas-ch0109"
+    },
+    {
+      "keywords": [
+        "/ch0201_"
+      ],
+      "style": "llas-ch0201"
+    },
+    {
+      "keywords": [
+        "/ch0202_"
+      ],
+      "style": "llas-ch0202"
+    },
+    {
+      "keywords": [
+        "/ch0203_"
+      ],
+      "style": "llas-ch0203"
+    },
+    {
+      "keywords": [
+        "/ch0204_"
+      ],
+      "style": "llas-ch0204"
+    },
+    {
+      "keywords": [
+        "/ch0205_"
+      ],
+      "style": "llas-ch0205"
+    },
+    {
+      "keywords": [
+        "/ch0206_"
+      ],
+      "style": "llas-ch0206"
+    },
+    {
+      "keywords": [
+        "/ch0207_"
+      ],
+      "style": "llas-ch0207"
+    },
+    {
+      "keywords": [
+        "/ch0208_"
+      ],
+      "style": "llas-ch0208"
+    },
+    {
+      "keywords": [
+        "/ch0209_",
+        "/ch9999_"
+      ],
+      "style": "llas-ch0209"
+    },
+    {
+      "keywords": [
+        "/ch0210_"
+      ],
+      "style": "llas-ch0210"
+    },
+    {
+      "keywords": [
+        "/ch0211_"
+      ],
+      "style": "llas-ch0211"
+    },
+    {
+      "keywords": [
+        "/ch0212_"
+      ],
+      "style": "llas-ch0212"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1021??"
+      ],
+      "style": "hasunosora-1021"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1022??"
+      ],
+      "style": "hasunosora-1022"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1023??"
+      ],
+      "style": "hasunosora-1023"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1031??"
+      ],
+      "style": "hasunosora-1031"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1032??"
+      ],
+      "style": "hasunosora-1032"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1033??"
+      ],
+      "style": "hasunosora-1033"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1041??"
+      ],
+      "style": "hasunosora-1041"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1042??"
+      ],
+      "style": "hasunosora-1042"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1043??"
+      ],
+      "style": "hasunosora-1043"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1051??"
+      ],
+      "style": "hasunosora-1051"
+    },
+    {
+      "keywords": [
+        "/3d_costume_????1052??"
+      ],
+      "style": "hasunosora-1052"
+    },
+    {
+      "keywords": [
+        "anon",
+        "rana",
+        "soyo",
+        "taki",
+        "tomori"
+      ],
+      "style": "mygo"
+    },
+    {
+      "keywords": [
+        "mutsumi",
+        "nyamu",
+        "uika",
+        "umiri",
+        "sakiko"
+      ],
+      "style": "ave-mujica"
+    }
+  ]
+}
