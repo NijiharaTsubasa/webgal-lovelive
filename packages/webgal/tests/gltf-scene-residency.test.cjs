@@ -31,7 +31,7 @@ function fixture() {
   class Surface {
     constructor() { this.actors = new Set(); this.active = null; this.disposed = false; surfaces.push(this); }
     activate(actor) { assert.equal(this.disposed, false); assert.ok(!this.active || this.active === actor); this.active = actor; }
-    deactivate(actor) { if (this.active === actor) this.active = null; }
+    deactivate(actor = this.active) { if (this.active === actor) this.active = null; }
     dispose() { if (this.disposed) return; this.disposed = true; for (const actor of [...this.actors]) actor.dispose(); this.actors.clear(); }
   }
   class Actor {
@@ -429,6 +429,129 @@ test('re-entry follows the planned spare slot despite a different free-figure or
   assert.equal(aRuntime.isActive,true);
   f.take('b',b);
   assert.equal(f.surfaces.length,2, 'the original context-sharing budget is retained');
+});
+
+test('changed motion preparation cannot bypass the planned slot and block the next actor', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const show = (key, url, motion) => f.sentence(f.C.changeFigure, url, {id:key,next:true,motion});
+  const pause = () => f.sentence(f.C.say, 'pause');
+  f.setPlan({sentenceList:[show('a',a,'first'),show('b',b),pause(),show('a',''),show('c',c),pause(),
+    show('b',''),show('a',a,'second'),pause(),show('a',''),show('c',''),pause(),
+    show('a',a,'second'),show('c',c),pause(),show('c',''),show('b',b),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const creations = f.actors.length;
+  const stage = f.state([['c',c],['a',a]]);
+  stage.live2dMotion = [{target:'a',motion:'second'}];
+  f.sceneData.currentSentenceId = 15;
+  await f.hooks.prepareStage(stage,f.signal());
+  const cRuntime = f.take('c',c), active = f.take('a',a);
+  assert.equal(active.actor.surface,f.surfaces[0]);
+  cRuntime.dispose(); f.displayed.delete('c');
+  f.sceneData.currentSentenceId = 18;
+  const next = f.state([['a',a],['b',b]]);
+  next.live2dMotion = stage.live2dMotion;
+  await f.hooks.prepareStage(next,f.signal());
+  assert.equal(f.actors.length,creations);
+  assert.equal(f.displayed.get('a').gltfRuntime,active);
+  f.take('b',b);
+});
+
+test('restoration maps whole future slot groups to reuse already preheated residents', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const show = (key, url) => f.sentence(f.C.changeFigure, url, {id:key,next:true});
+  const pause = () => f.sentence(f.C.say, 'pause');
+  f.setPlan({sentenceList:[show('c',c),pause(),show('c',''),show('a',a),show('b',b),pause(),show('a',''),show('c',c),pause(),
+    show('b',''),show('a',a),pause(),show('a',''),show('c',''),pause(),
+    show('a',a),show('c',c),pause(),show('c',''),show('b',b),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const creations = f.actors.length;
+  f.sceneData.currentSentenceId = 18;
+  const restored = f.state([['c',c],['a',a]]);
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},restored,18,f.signal());
+  assert.equal(f.actors.length,creations,'all restored and future appearances already have compatible preheated copies');
+  const cRuntime = f.take('c',c), active = f.take('a',a);
+  cRuntime.dispose(); f.displayed.delete('c');
+  f.sceneData.currentSentenceId = 21;
+  await f.hooks.prepareStage(f.state([['a',a],['b',b]]),f.signal());
+  assert.equal(f.actors.length,creations);
+  assert.equal(f.displayed.get('a').gltfRuntime,active);
+  f.take('b',b);
+});
+
+test('loading the same displayed stage keeps its existing future residency plan', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const show = (key,url) => f.sentence(f.C.changeFigure,url,{id:key,next:true});
+  const pause = () => f.sentence(f.C.say,'pause');
+  f.setPlan({sentenceList:[show('a',a),show('b',b),pause(),show('a',''),show('c',c),pause(),
+    show('b',''),show('a',a),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  f.sceneData.currentSentenceId = 3;
+  await f.hooks.prepareStage(f.state([['a',a],['b',b]]),f.signal());
+  f.take('a',a); f.take('b',b);
+  const count = f.actors.length;
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},f.state([['b',b],['a',a]]),3,f.signal());
+  assert.equal(f.actors.length,count,'same-stage restore must not regroup already-preheated future actors');
+});
+
+test('restoration selects its new layout before publishing the restored playback cursor', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const show = (key,url) => f.sentence(f.C.changeFigure,url,{id:key,next:true});
+  const pause = () => f.sentence(f.C.say,'pause');
+  f.setPlan({sentenceList:[show('a',a),show('b',b),pause(),show('a',''),show('c',c),pause(),
+    show('b',''),show('a',a),pause(),show('a',''),show('c',''),pause(),
+    show('a',a),show('c',c),pause(),show('c',''),show('b',b),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const count = f.actors.length;
+  f.sceneData.currentSentenceId = 9;
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},f.state([['c',c],['a',a]]),15,f.signal());
+  const cRuntime = f.take('c',c), aRuntime = f.take('a',a);
+  cRuntime.dispose(); f.displayed.delete('c');
+  f.sceneData.currentSentenceId = 18;
+  await f.hooks.prepareStage(f.state([['a',a],['b',b]]),f.signal());
+  assert.equal(f.actors.length,count,'the restored layout must not strand the preheated next actor');
+  assert.equal(aRuntime.actor.surface,f.surfaces[0]);
+  f.take('b',b);
+});
+
+test('restoration pauses the actual canvas occupant while an older exit instance is still retained', async () => {
+  const f = fixture(), c = '/c/config.json';
+  const figure = url => ({url,position:'center',bounds:[0,0,1,1],motion:'',expression:''});
+  f.setPlan({batches:[[{key:'actor',figure:figure(a)}],[{key:'actor',figure:figure(b)}]]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  await f.hooks.prepareStage(f.state([['actor',a]]),f.signal());
+  const exiting = f.take('actor',a);
+  await f.hooks.prepareStage(f.state([['actor',b]]),f.signal());
+  const displayed = f.take('actor',b);
+  assert.equal(exiting.isActive,false);
+  assert.equal(displayed.isActive,true);
+  f.setPlan({batches:[[{key:'actor',figure:figure(b)}],[{key:'actor',figure:figure(c)}]]});
+  f.onCreate(() => assert.equal(f.actors.at(-1).surface.active,null,'native surface forbids preparing over its displayed actor'));
+  await f.hooks.prepareRestore({sceneUrl:'scene.txt'},f.state([['actor',b]]),0,f.signal());
+  assert.equal(displayed.actor.surface.active,displayed.actor);
+  assert.equal(displayed.isActive,true);
+  assert.equal(exiting.isActive,false,'a retained exit instance must not be reactivated');
+  const controller = new AbortController();
+  f.sceneData.currentSentenceId = 1;
+  f.setPlan({batches:[[{key:'actor',figure:figure(b)}],[{key:'actor',figure:figure('/d/config.json')}]]});
+  f.onCreate(() => controller.abort());
+  await assert.rejects(f.hooks.prepareRestore({sceneUrl:'scene.txt'},f.state([['actor',b]]),0,controller.signal),
+    error => error.name === 'AbortError');
+  assert.equal(displayed.actor.surface.active,displayed.actor);
+  assert.equal(displayed.isActive,true);
+  assert.equal(exiting.isActive,false,'cancelling restoration must not revive a retained exit instance');
+});
+
+test('failed stage preparation does not reactivate retained exit instances', async () => {
+  const f = fixture(), c = '/c/config.json';
+  await f.hooks.prepareStage(f.state([['actor',a]]),f.signal());
+  const exiting = f.take('actor',a);
+  await f.hooks.prepareStage(f.state([['actor',b]]),f.signal());
+  const displayed = f.take('actor',b);
+  f.failPrepare();
+  await assert.rejects(f.hooks.prepareStage(f.state([['actor',c]]),f.signal()),/fixture preparation failed/);
+  assert.equal(displayed.actor.surface.active,displayed.actor);
+  assert.equal(displayed.isActive,true);
+  assert.equal(exiting.isActive,false);
 });
 
 test('releaseScene drops inactive preloads immediately and retains an active context only until exit', async () => {

@@ -83,11 +83,21 @@ function plannedSlot(owner: Residency, identity: string) {
   }
   return slots?.get(identity);
 }
-function preferPlannedSlot(owner: Residency, identity: string, candidates: Resident[]) {
+function preferPlannedSlot(owner: Residency, identity: string, candidates: Resident[], slots?: Map<string, number | undefined>) {
   // A returning identity can have several preheated copies. Keep the planned
   // layout so its next neighbour does not collide with an unnecessarily chosen copy.
-  const slot = plannedSlot(owner, identity);
+  const slot = slots ? slots.get(identity) : plannedSlot(owner, identity);
   return candidates.sort((a, b) => Number(b.slot === slot) - Number(a.slot === slot));
+}
+function selectStageResident(owner: Residency, key: string, figure: ProjectedGltfFigure, used: Set<number>, slots?: Map<string, number | undefined>) {
+  const identity = gltfFigureIdentity(key, figure);
+  const displayed = WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime;
+  const active = owner.residents.find(item => item.identity === identity && owner.active.has(item)
+    && item.runtime === displayed && !used.has(item.slot));
+  const slot = active ? undefined : slots ? slots.get(identity) : plannedSlot(owner, identity);
+  return active ?? preferPlannedSlot(owner, identity, owner.residents.filter(item => item.identity === identity
+    && !owner.active.has(item) && !used.has(item.slot)), slots).find(item => item.slot === slot
+    || item.backgroundReady && item.warmedMotion === figure.motion && item.warmedExpression === figure.expression);
 }
 function stageFigures(state: IStageState) {
   return [...seedGltfFigures(state)].filter(([, figure]) => figure.url).map(([key, figure]) => ({ key, figure: {
@@ -147,11 +157,25 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
     await prepareScene(scene, state, signal, line);
     return prepareStage(state, signal);
   }
+  if (owner.sceneUrl === scene.sceneUrl && scene.sceneUrl === WebGAL.sceneManager.sceneData.currentScene.sceneUrl
+      && line === WebGAL.sceneManager.sceneData.currentSentenceId) {
+    const displayed = [...owner.active].filter(record => record.runtime.isActive);
+    const targets = stageFigures(state).filter(({figure}) => /\/config\.json(?:[?#].*)?$/.test(figure.url)
+      && !nativeConfigUrls.has(figure.url));
+    const unchanged = targets.length === displayed.length && targets.every(({key, figure}) => displayed.some(record =>
+      record.identity === gltfFigureIdentity(key, figure)
+      && record.runtime === WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime
+      && record.runtime.isReadyFor(figure.motion, figure.expression)));
+    // A same-line, unchanged restore can keep the preheated future layout;
+    // reseeding it from a different free-figure order would shuffle contexts.
+    if (unchanged && tryPrepareStage(state, signal)) return;
+  }
   const plan = planGltfSceneResidency(scene, state, line);
   const originals = new Map(owner.residents.map(record => [record, record.lastUse]));
   const originalSurfaces = new Set(owner.surfaces);
   const originalUrl = owner.sceneUrl;
   const originalSchedule = owner.slotSchedule;
+  const displayedBeforeRestore = [...owner.active].filter(record => record.runtime.isActive);
   const lastUses = new Map<Resident, number>();
   const slotMapping = new Map<number, number>(), used = new Set<number>();
   // Rebind plan slots to existing contexts, preferring the currently displayed actor.
@@ -166,7 +190,7 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
     for (const [slot, group] of groups) {
       const candidates = owner.residents.filter(record => !used.has(record.slot) && record.runtime.isReady
         && group.some(({key, figure}) => record.identity === gltfFigureIdentity(key, figure)));
-      const preferred = candidates.find(record => owner.active.has(record)) ?? candidates[0];
+      const preferred = candidates.find(record => owner.active.has(record) && record.runtime.isActive) ?? candidates[0];
       if (preferred) { slotMapping.set(slot, preferred.slot); used.add(preferred.slot); }
     }
     for (const slot of groups.keys()) if (!slotMapping.has(slot)) {
@@ -182,26 +206,35 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
       const identity = gltfFigureIdentity(key, figure);
       let record = owner.residents.find(item => item.identity === identity && item.slot === actual && item.runtime.isReady);
       if (!record && await isGltfConfig(figure.url)) {
-        const active = [...owner.active].find(item => item.slot === actual);
-        if (active) { active.runtime.suspend(); owner.surfaces[actual].deactivate(active.actor); }
+        // Exit animations can retain older records on this slot. Pause its
+        // actual occupants, not merely the first retained record.
+        const active = [...owner.active].filter(item => item.slot === actual && item.runtime.isActive);
+        for (const record of active) record.runtime.suspend();
+        owner.surfaces[actual]?.deactivate();
         try {
           record = await addResident(owner, actual, key, figure, signal);
           record.backgroundReady = true;
           record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
         } finally {
-          if (active) {
-            owner.surfaces[actual].activate(active.actor); active.runtime.activate(); active.runtime.update(0);
+          for (const record of active) if (owner.active.has(record)) {
+            owner.surfaces[actual].activate(record.actor); record.runtime.activate(); record.runtime.update(0);
           }
         }
       }
       if (record) lastUses.set(record, Math.max(lastUses.get(record) ?? -1, lastUse));
     }
     assertCurrent(signal);
-    if (!tryPrepareStage(state, signal) && !await prepareDisplayedStage(state, signal)) await prepareStage(state, signal);
+    const mappedSchedule = new Map([...plan.slotSchedule].map(([line, slots]) => [line,
+      new Map([...slots].map(([identity, slot]) => [identity, slot === undefined ? undefined : slotMapping.get(slot)]))]));
+    // The global scene cursor is published only after this preparation commits.
+    // Use the restored layout now, rather than selecting copies from the old cursor.
+    const restoredSlots = mappedSchedule.get(line - 1) ?? new Map<string, number | undefined>();
+    if (!tryPrepareStage(state, signal, restoredSlots) && !await prepareDisplayedStage(state, signal, restoredSlots)) {
+      await prepareStage(state, signal, restoredSlots);
+    }
     assertCurrent(signal);
     owner.sceneUrl = scene.sceneUrl;
-    owner.slotSchedule = new Map([...plan.slotSchedule].map(([line, slots]) => [line,
-      new Map([...slots].map(([identity, slot]) => [identity, slot === undefined ? undefined : slotMapping.get(slot)]))]));
+    owner.slotSchedule = mappedSchedule;
     for (const record of [...owner.residents]) {
       record.lastUse = lastUses.get(record) ?? line - 1;
       if (!lastUses.has(record) && !owner.active.has(record) && prepared.get(record.identity) !== record) releaseResident(owner, record);
@@ -217,14 +250,14 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
         surface.dispose(); delete owner.surfaces[slot];
       }
     });
-    for (const active of owner.active) {
+    for (const active of displayedBeforeRestore) if (owner.active.has(active)) {
       owner.surfaces[active.slot].activate(active.actor); active.runtime.activate(); active.runtime.update(0);
     }
     throw error;
   }
 }
 
-async function prepareStage(state: IStageState, signal: AbortSignal) {
+async function prepareStage(state: IStageState, signal: AbortSignal, slots?: Map<string, number | undefined>) {
   const figures = stageFigures(state);
   const targets = [];
   for (const entry of figures) {
@@ -237,6 +270,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
     : { surfaces: [], residents: [], active: new Set(), retired: false, mode: getCharacterLoadingMode() } as Residency;
   const originalResidents = new Set(owner.residents);
   const originalSurfaces = new Set(owner.surfaces);
+  const displayedBeforePreparation = [...owner.active].filter(record => record.runtime.isActive);
   const used = new Set<number>();
   const selections: Array<{ record: Resident; figure: ProjectedGltfFigure }> = [];
   const reserved = new Map<string, Resident>();
@@ -248,7 +282,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
   }
   const candidatesByKey = new Map(targets.filter(item => !reserved.has(item.key)).map(({ key, figure }) =>
     [key, preferPlannedSlot(owner, gltfFigureIdentity(key, figure), owner.residents.filter(record => record.identity === gltfFigureIdentity(key, figure)
-      && !owner.active.has(record) && !used.has(record.slot)))]));
+      && !owner.active.has(record) && !used.has(record.slot)), slots)]));
   const matched = new Map<string, Resident>();
   const slotKeys = new Map<number, string>();
   const match = (key: string, visited: Set<number>): boolean => {
@@ -321,7 +355,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
           surface?.dispose(); delete owner.surfaces[slot];
         }
       });
-      for (const active of owner.active) {
+      for (const active of displayedBeforePreparation) if (owner.active.has(active)) {
         owner.surfaces[active.slot].activate(active.actor); active.runtime.activate(); active.runtime.update(0);
       }
     }
@@ -330,7 +364,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal) {
 }
 
 /** No file lookup, Promise queue, GPU work, or mutation of displayed commands. */
-function tryPrepareStage(state: IStageState, signal: AbortSignal) {
+function tryPrepareStage(state: IStageState, signal: AbortSignal, slots?: Map<string, number | undefined>) {
   if (signal.aborted) return false;
   const targets = stageFigures(state).filter(({figure}) => /\/config\.json(?:[?#].*)?$/.test(figure.url)
     && !nativeConfigUrls.has(figure.url));
@@ -345,14 +379,7 @@ function tryPrepareStage(state: IStageState, signal: AbortSignal) {
   const used = new Set<number>();
   const held: Array<{record: Resident; figure: ProjectedGltfFigure}> = [];
   for (const {key, figure} of targets) {
-    const identity = gltfFigureIdentity(key, figure);
-    const displayed = WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime;
-    const active = owner.residents.find(item => item.identity === identity && owner.active.has(item)
-      && item.runtime === displayed && !used.has(item.slot));
-    const slot = active ? undefined : plannedSlot(owner, identity);
-    const record = active ?? preferPlannedSlot(owner, identity, owner.residents.filter(item => item.identity === identity
-      && !owner.active.has(item) && !used.has(item.slot))).find(item => item.slot === slot
-      || item.backgroundReady && item.warmedMotion === figure.motion && item.warmedExpression === figure.expression);
+    const record = selectStageResident(owner, key, figure, used, slots);
     if (!record || !record.runtime.isReady) return false;
     if (!owner.active.has(record) && (!record.backgroundReady || record.warmedMotion !== figure.motion
         || record.warmedExpression !== figure.expression)) return false;
@@ -377,7 +404,7 @@ function tryPrepareStage(state: IStageState, signal: AbortSignal) {
   return true;
 }
 
-async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
+async function prepareDisplayedStage(state: IStageState, signal: AbortSignal, slots?: Map<string, number | undefined>) {
   const owner = current;
   if (!owner || owner.retired || owner.mode !== getCharacterLoadingMode()) return false;
   const named: Array<{kind: 'motion' | 'expression'; name: string}> = [];
@@ -385,17 +412,16 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal) {
   const used = new Set<number>();
   const rollback = () => { for (const record of held) if (prepared.get(record.identity) === record) {
     prepared.delete(record.identity);
-    if (!owner.active.has(record) && !predictedIdentities.has(record.identity) && owner.residents.includes(record)) releaseResident(owner, record);
+    if (owner.mode === 'on-demand' && !owner.active.has(record) && !predictedIdentities.has(record.identity)
+        && owner.residents.includes(record)) releaseResident(owner, record);
   } };
   try {
   for (const {key, figure} of stageFigures(state)) {
     if (!/\/config\.json(?:[?#].*)?$/.test(figure.url)) continue;
-    const displayed = WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime;
     const identity = gltfFigureIdentity(key, figure);
-    const record = owner.residents.find(record => !used.has(record.slot) && record.identity === identity
-      && (owner.active.has(record) ? record.runtime === displayed
-        : record.backgroundReady && record.warmedMotion === figure.motion && record.warmedExpression === figure.expression));
-    if (!record || !record.runtime.isReady) {
+    const record = selectStageResident(owner, key, figure, used, slots);
+    if (!record || !record.runtime.isReady || !owner.active.has(record)
+        && (!record.backgroundReady || record.warmedMotion !== figure.motion || record.warmedExpression !== figure.expression)) {
       if (await isGltfConfig(figure.url)) { rollback(); return false; }
       continue;
     }
