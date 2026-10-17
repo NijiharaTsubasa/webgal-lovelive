@@ -98,6 +98,46 @@ function fixture() {
 }
 const a = '/a/config.json', b = '/b/config.json';
 
+test('scene entry anchors shared future groups to actors retained in the first committed stage', async () => {
+  const f=fixture(),c='/c/config.json',d='/d/config.json';
+  const show=(key,url)=>f.sentence(f.C.changeFigure,url,{id:key,next:true});
+  const pause=()=>f.sentence(f.C.say,'pause');
+  f.setPlan({sentenceList:[show('a',a),show('b',b),show('d',d),pause(),show('d',''),show('c',c),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const previous=f.state([['a',a],['b',b],['c',c]]);
+  await f.hooks.prepareStage(previous,f.signal());
+  f.take('a',a);const retainedB=f.take('b',b),retainedC=f.take('c',c);
+  f.setPlan({sentenceList:[show('a',''),show('d',d),pause(),show('c',''),show('a',a),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'next.txt'},previous,f.signal());
+  f.sceneData.currentScene.sceneUrl='next.txt';f.sceneData.currentSentenceId=3;
+  const count=f.actors.length;
+  const first=f.state([['b',b],['c',c],['d',d]]);
+  assert.equal(f.hooks.tryPrepareStage(first,f.signal()),true,'first scene group must already be ready');
+  const next=f.take('d',d);
+  assert.notEqual(next.actor.surface,retainedB.actor.surface);
+  assert.notEqual(next.actor.surface,retainedC.actor.surface);
+  assert.equal(f.actors.length,count,'a retained actor must not strand the preheated newcomer');
+});
+
+test('scene entry refreshes a reused hidden actor for its new initial motion before playback', async () => {
+  const f=fixture();
+  const show=(key,url,motion)=>f.sentence(f.C.changeFigure,url,{id:key,next:true,motion});
+  const pause=()=>f.sentence(f.C.say,'pause');
+  f.setPlan({sentenceList:[show('actor',a,'old'),pause(),show('actor',''),show('other',b,''),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+  const previous=f.state([['other',b]]);await f.hooks.prepareStage(previous,f.signal());
+  const active=f.take('other',b),count=f.actors.length;
+  f.setPlan({sentenceList:[pause(),show('other',''),show('actor',a,'new'),pause()]});
+  await f.hooks.prepareScene({sceneUrl:'next.txt'},previous,f.signal());
+  f.sceneData.currentScene.sceneUrl='next.txt';f.sceneData.currentSentenceId=4;
+  const next=f.state([['actor',a]]);next.live2dMotion=[{target:'actor',motion:'new'}];
+  assert.equal(f.hooks.tryPrepareStage(next,f.signal()),true,'new scene commands must be prepared before the actor enters');
+  assert.equal(f.actors.length,count);
+  assert.equal(active.isActive,true,'preparation must restore the currently displayed canvas occupant');
+  f.take('actor',a);
+  assert.equal(active.isActive,false,'the departing occupant suspends only when the replacement commits');
+});
+
 test('scene entry retains displayed runtimes while preheating the next scene', async () => {
   const f = fixture(), stage = f.state([['actor', a]]);
   await f.hooks.prepareStage(stage, f.signal());

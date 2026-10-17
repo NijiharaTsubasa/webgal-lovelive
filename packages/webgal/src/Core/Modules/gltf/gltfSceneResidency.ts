@@ -200,7 +200,25 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
   try {
     await preloadGltfNamedResources(plan.named);
     assertCurrent(signal);
+    let entryLine = Infinity;
+    let entrySlots = new Map<string, number | undefined>();
+    for (const [scheduledLine, schedule] of plan.slotSchedule) if (scheduledLine < entryLine) {
+      entryLine = scheduledLine; entrySlots = schedule;
+    }
+    // Reserve the actors that survive the scene's first atomic commit before
+    // reusing future groups. An actor leaving immediately can otherwise steal
+    // a group from a retained actor that shares it only later in the script.
     for (const [slot, group] of groups) {
+      const retained = owner.residents.find(record => !used.has(record.slot) && owner.active.has(record)
+        && record.runtime.isActive && group.some(({key, figure}) => {
+          const identity = gltfFigureIdentity(key, figure);
+          return entrySlots.get(identity) === slot && record.identity === identity
+            && WebGAL.gameplay.pixiStage?.getStageObjByKey(key)?.gltfRuntime === record.runtime;
+        }));
+      if (retained) { slotMapping.set(slot, retained.slot); used.add(retained.slot); }
+    }
+    for (const [slot, group] of groups) {
+      if (slotMapping.has(slot)) continue;
       const candidates = owner.residents.filter(record => !used.has(record.slot) && record.runtime.isReady
         && group.some(({key, figure}) => record.identity === gltfFigureIdentity(key, figure)));
       const preferred = candidates.find(record => owner.active.has(record) && record.runtime.isActive) ?? candidates[0];
@@ -218,14 +236,23 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
       const actual = slotMapping.get(slot)!;
       const identity = gltfFigureIdentity(key, figure);
       let record = owner.residents.find(item => item.identity === identity && item.slot === actual && item.runtime.isReady);
-      if (!record && await isGltfConfig(figure.url)) {
+      const refresh = record && !owner.active.has(record) && (!record.backgroundReady
+        || record.warmedMotion !== figure.motion || record.warmedExpression !== figure.expression
+        || !record.runtime.isReadyFor(figure.motion, figure.expression));
+      if (refresh || !record && await isGltfConfig(figure.url)) {
         // Exit animations can retain older records on this slot. Pause its
         // actual occupants, not merely the first retained record.
         const active = [...owner.active].filter(item => item.slot === actual && item.runtime.isActive);
         for (const record of active) record.runtime.suspend();
         owner.surfaces[actual]?.deactivate();
         try {
-          record = await addResident(owner, actual, key, figure, signal);
+          if (!record) record = await addResident(owner, actual, key, figure, signal);
+          else {
+            record.runtime.activate(); record.runtime.suspend();
+            record.runtime.setFocus(figure.focus ?? baseFocusParam);
+            record.runtime.setMotion(figure.motion); record.runtime.setExpression(figure.expression);
+            await record.runtime.prepare();
+          }
           record.backgroundReady = true;
           record.warmedMotion = figure.motion; record.warmedExpression = figure.expression;
         } finally {
