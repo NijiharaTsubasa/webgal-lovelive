@@ -126,6 +126,19 @@ async function addResident(owner: Residency, slot: number, key: string, figure: 
 }
 
 async function prepareScene(scene: IScene, state: IStageState, signal: AbortSignal, startLine = 0) {
+  if (current && !current.retired) {
+    // Replan around the displayed actors, preserving their Pixi containers,
+    // motion clocks and physics state across scene boundaries.
+    const owner = current, previousMode = owner.mode;
+    owner.mode = 'scene';
+    try {
+      await prepareRestore(scene, state, startLine, signal);
+    } catch (error) {
+      owner.mode = previousMode;
+      throw error;
+    }
+    return;
+  }
   const plan = planGltfSceneResidency(scene, state, startLine);
   const owner: Residency = { surfaces: [], residents: [], active: new Set(), retired: false, mode: 'scene', sceneUrl: scene.sceneUrl, slotSchedule: plan.slotSchedule };
   try {
@@ -266,7 +279,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal, slots?: Map
     assertCurrent(signal);
   }
   const previous = current;
-  const owner = current && current.mode === getCharacterLoadingMode() ? current
+  const owner = current && !current.retired ? current
     : { surfaces: [], residents: [], active: new Set(), retired: false, mode: getCharacterLoadingMode() } as Residency;
   const originalResidents = new Set(owner.residents);
   const originalSurfaces = new Set(owner.surfaces);
@@ -337,6 +350,7 @@ async function prepareStage(state: IStageState, signal: AbortSignal, slots?: Map
     prepared.set(record.identity, record);
   }
   assertCurrent(signal);
+  owner.mode = getCharacterLoadingMode();
   current = owner;
   if (previous !== owner) retire(previous);
   for (const record of [...owner.residents]) {

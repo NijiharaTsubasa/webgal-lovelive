@@ -98,6 +98,57 @@ function fixture() {
 }
 const a = '/a/config.json', b = '/b/config.json';
 
+test('scene entry retains displayed runtimes while preheating the next scene', async () => {
+  const f = fixture(), stage = f.state([['actor', a]]);
+  await f.hooks.prepareStage(stage, f.signal());
+  const active = f.take('actor', a);
+  active.elapsed = 17;
+  f.setPlan({sentenceList:[f.sentence(f.C.say,'retained'),
+    f.sentence(f.C.changeFigure,b,{id:'actor'}),f.sentence(f.C.say,'future')]});
+  await f.hooks.prepareScene({sceneUrl:'next.txt'},stage,f.signal());
+  await f.hooks.prepareStage(stage,f.signal());
+  assert.equal(f.api.hasPreparedGltfCharacter('actor',a,'center',[0,0,1,1]),false,
+    'stage synchronization must not replace the existing Pixi container');
+  assert.equal(f.actors.filter(actor=>actor.sourceUrl===a).length,1);
+  assert.equal(active.elapsed,17);
+  assert.equal(active.isActive,true);
+  assert.equal(active.actor.surface.active,active.actor);
+  assert.ok(f.actors.some(actor=>actor.sourceUrl===b&&!actor.disposed),'future models remain preheated');
+});
+
+test('changing loading mode retains displayed runtimes in both directions', async () => {
+  for (const mode of ['scene','on-demand']) {
+    const f=fixture(), stage=f.state([['actor',a]]);
+    f.setMode(mode);
+    await f.hooks.prepareStage(stage,f.signal());
+    const active=f.take('actor',a);
+    f.setMode(mode==='scene'?'on-demand':'scene');
+    await f.hooks.prepareStage(stage,f.signal());
+    assert.equal(f.api.hasPreparedGltfCharacter('actor',a,'center',[0,0,1,1]),false);
+    assert.equal(f.actors.length,1);
+    assert.equal(active.isActive,true);
+    active.dispose();
+    f.hooks.releaseScene();
+    assert.equal(active.actor.disposed,true,'retained residents still release correctly');
+  }
+});
+
+test('cancelled scene entry preserves the displayed runtime and supports retry', async () => {
+  const f=fixture(),stage=f.state([['actor',a]]);
+  await f.hooks.prepareStage(stage,f.signal());
+  const active=f.take('actor',a),controller=new AbortController();
+  f.setPlan({sentenceList:[f.sentence(f.C.say,'retained'),
+    f.sentence(f.C.changeFigure,b,{id:'actor'}),f.sentence(f.C.say,'future')]});
+  f.onCreate(()=>controller.abort());
+  await assert.rejects(f.hooks.prepareScene({sceneUrl:'next.txt'},stage,controller.signal),/Cancelled/);
+  assert.equal(active.actor.disposed,false);
+  assert.equal(active.actor.surface.active,active.actor);
+  f.onCreate(undefined);
+  await f.hooks.prepareScene({sceneUrl:'next.txt'},stage,f.signal());
+  await f.hooks.prepareStage(stage,f.signal());
+  assert.equal(f.api.hasPreparedGltfCharacter('actor',a,'center',[0,0,1,1]),false);
+});
+
 test('restoring the current scene or another scene reuses the displayed group without GPU preparation', async () => {
   const f = fixture();
   const items = Array.from({length:8}, (_, i) => [`actor${i}`, `/actor${i}/config.json`]);
@@ -289,6 +340,8 @@ test('scene release waits for the active retiring actor and then releases its co
   f.setPlan({named:[],batches:[]});
   await f.hooks.prepareScene({sceneUrl:'next.txt'},f.state([]),f.signal());
   assert.equal(surface.disposed,false,'active retiring actor retains its context');
+  f.sceneData.currentScene.sceneUrl='next.txt';
+  f.sceneData.currentSentenceId=1;
   active.dispose();
   assert.equal(surface.disposed,true); assert.equal(active.actor.disposed,true);
 });
@@ -315,19 +368,21 @@ test('aborting replacement preparation resumes the previously committed actor', 
   assert.equal(f.actors.filter(actor => !actor.disposed).length,1);
 });
 
-test('switching loading mode rebinds the prepared owner and releases the old active context on commit', async () => {
+test('switching loading mode retains the displayed actor and releases it when actually replaced', async () => {
   const f = fixture();
   await f.hooks.prepareStage(f.state([['actor',a]]),f.signal());
   const active = f.take('actor',a);
   f.setMode('on-demand');
   await f.hooks.prepareStage(f.state([['actor',a]]),f.signal());
-  assert.equal(f.api.hasPreparedGltfCharacter('actor',a,'center',[0,0,1,1]),true);
+  assert.equal(f.api.hasPreparedGltfCharacter('actor',a,'center',[0,0,1,1]),false);
   assert.equal(active.isActive,true);
   assert.equal(active.actor.disposed,false);
-  const rebound = f.take('actor',a);
-  assert.notEqual(rebound,active);
+  assert.equal(f.actors.length,1);
+  await f.hooks.prepareStage(f.state([['actor',b]]),f.signal());
+  const rebound = f.take('actor',b);
   active.dispose();
-  assert.equal(active.actor.surface.disposed,true);
+  assert.equal(active.actor.disposed,true);
+  assert.equal(rebound.actor.surface.disposed,false,'the replacement still owns the shared context');
   assert.equal(f.actors.filter(actor => !actor.disposed).length,1);
   assert.equal(f.displayed.get('actor').gltfRuntime,rebound);
 });
