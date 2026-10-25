@@ -22,6 +22,9 @@ export enum fileType {
  * @return {string} 处理后的资源路径（绝对或相对）
  */
 export const assetSetter = (fileName: string, assetType: fileType): string => {
+  if (assetType === fileType.figure && /config\.json\+/i.test(fileName)) {
+    return fileName.split(/(?<=config\.json)\+/i).map(path => assetSetter(path, assetType)).join('+');
+  }
   // 是绝对链接，直接返回
   if (fileName.match('http://') || fileName.match('https://')) {
     return fileName;

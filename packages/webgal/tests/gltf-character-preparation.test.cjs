@@ -26,6 +26,17 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function setGlobal(t,key,value) { const old=Object.getOwnPropertyDescriptor(global,key); Object.defineProperty(global,key,{value,writable:true,configurable:true}); t.after(()=>{if(old)Object.defineProperty(global,key,old);else delete global[key];}); }
 const request=id=>({url:'game/a/config.json',motion:'motion',expression:'face',preloadId:id});
 
+test('composed figures are classified as glTF before playback and lookahead never fetches the joined path',async t=>{
+  setGlobal(t,'document',{baseURI:'http://localhost/'});
+  const checked=[],prepared=[];
+  const api=load({preloadNamed:async(index,requests)=>prepared.push(requests)},async url=>{checked.push(url);return {url,gltf:true};});
+  const pair='game/figure/head/config.json+body/config.json';
+  assert.equal(api.isGltfCharacterUrl(pair),true);
+  await api.setGltfPreloadRequests([{...request('pair'),url:pair}]);
+  assert.deepEqual(checked,[pair]);
+  assert.equal(prepared.length,1);
+});
+
 test('progress lookahead only fetches glTF inputs and never allocates speculative contexts', async t=>{
   setGlobal(t,'document',{baseURI:'http://localhost/'});
   const calls=[];

@@ -1,6 +1,6 @@
 # WebGAL_LoveLive专版引擎
 
-本项目 Fork 自 [WebGAL_MyGO专版引擎](https://github.com/boomwwww/webgal-mygo/)
+本项目 Fork 自 [WebGAL MyGO专版引擎](https://github.com/boomwwww/webgal-mygo/)
 
 <img width="1920" height="1032" alt="实际运行效果" src="https://github.com/user-attachments/assets/e0636cef-c92e-4210-a350-297bfd5552d6" />
 
@@ -16,12 +16,13 @@
  - 《LoveLive! 学园偶像祭 群星闪耀》
  - 《Link Like LoveLive!》
  - 《幻日夜羽：蜃景努玛梓》
+ - 《BanG Dream! 少女乐团派对》（支持头身任意组合）
 
 #### 向下兼容 WebGAL_MyGO 二创生态
 
 glTF 3D 立绘支持原封播放《BanG Dream! 少女乐团派对》手游格式 Live2D 表情和动作，可直接复用手游拆包及社区自制的表情和动作，无需二次转换。
 
-保留 WebGAL_MyGO 全部已有功能。场景文件当前未新增参数，也未对已有参数语义做任何变动， glTF 3D 立绘完全复用并支持 Live2D 立绘的现有参数。
+保留 WebGAL MyGO 全部已有功能。场景文件当前未新增参数，也未对已有参数语义做任何变动， glTF 3D 立绘完全复用并支持 Live2D 立绘的现有参数。
 
 #### 内置 LoveLive 各游戏界面主题
 

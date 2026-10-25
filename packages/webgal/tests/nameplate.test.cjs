@@ -24,6 +24,21 @@ test('narration, missing targets and unsupported themes use the default',()=>{
  assert.equal(resolveNameplate(base,undefined),undefined);
  assert.equal(resolveNameplate(base,{bad:true}),undefined);
 });
+
+test('composed figures match the head package only, including higher-priority body rules',()=>{
+ const template=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../../../themes/llas/template.json'),'utf8'));
+ const match=p=>resolveNameplate({...base,freeFigure:[{key:'actor',name:p}]},template['nameplate-rules']);
+ for(let member=36;member<=40;member++) {
+  const head=`game/3d/figure/bangdream/${String(member).padStart(3,'0')}_cos_live_default/config.json`;
+  assert.equal(match(head),'mygo');
+  assert.equal(match(`${head}+game/3d/figure/llas/ch0001_co0001/config.json`),'mygo');
+ }
+ for(const member of ['035','041','1036']) assert.equal(match(`/bangdream/${member}_cos_live_default/config.json`),undefined);
+ assert.equal(match('/unknown/config.json+/037_cos_live_default/config.json'),undefined);
+ assert.equal(match('/ch0002_co0001/config.json+/037_cos_live_default/config.json'),'llas-ch0002');
+ assert.equal(match('GAME\\FIGURE\\%30%33%37_cos_live_default\\CONFIG.JSON+/ch0001_co0001/config.json'),'mygo');
+ assert.equal(resolveNameplate({...base,dialogueFigure:'fig-left',freeFigure:[],figNameLeft:'/037_cos_live_default/config.json+/ch0001_co0001/config.json'},template['nameplate-rules']),'mygo');
+});
 test('ignores malformed rules, rejects unsafe style names, and takes first match',()=>{
  assert.equal(resolveNameplate(base,[null,{keywords:[''],style:'x'},{keywords:['ch0001'],style:'x]evil'},...rules]),'honoka');
  assert.equal(resolveNameplate({...base,freeFigure:[{key:'actor',name:'/ch0001_%oops'}]},rules),'honoka');

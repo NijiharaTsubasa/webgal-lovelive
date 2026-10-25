@@ -1,7 +1,15 @@
 type Component = Record<string, any>;
+/** A composed figure keeps each config path independent of the other package. */
+export function splitFigureConfigs(value: string): string[] {
+  const parts = value.split(/(?<=config\.json)\+/i);
+  if (parts.length > 1 && (parts.length !== 2 || parts.some(part => !/\/config\.json(?:[?#].*)?$/i.test(`/${part}`)))) {
+    throw Error('头身组合必须指定两个 config.json，顺序为头部+身体');
+  }
+  return parts;
+}
 export interface FixedResourceEntry {
   type: string; name: string; config: string; component: Component;
-  motionGroup?: string; basePath: string;
+  motionGroup?: string; group?: string; basePath: string;
 }
 
 export class ResourceHttpError extends Error {
@@ -99,10 +107,39 @@ export class FixedGltfResources {
     return entry;
   }
   async model(config: string) {
+    const models = await this.models(config);
+    return models.find(entry => entry.component.role === 'body') ?? models[0];
+  }
+
+  async models(config: string): Promise<FixedResourceEntry[]> {
+    const paths = splitFigureConfigs(config);
+    if (paths.length === 2) {
+      const entries = await Promise.all(paths.map(async (path, index) => {
+        const url = new URL(path, new URL('figure/', this.root)).href;
+        const manifest = await this.fetch(url);
+        const models: Component[] = manifest.components?.filter((c: Component) => c.type === 'model') ?? [];
+        const heads = models.filter(c => c.role === 'head'), bodies = models.filter(c => c.role === 'body');
+        if (heads.length > 1 || bodies.length > 1) throw Error(`${url}: 不支持包含多个头部或多个身体的模型配置`);
+        const selected = index === 0 ? heads : bodies;
+        if (selected.length !== 1) throw Error(`${url}: ${index === 0 ? '第一份配置必须包含一个头部' : '第二份配置必须包含一个身体'}`);
+        const component = selected[0];
+        return { type: 'model', name: component.name, component, group: component.group,
+          config: url, basePath: new URL('.', url).href };
+      }));
+      return entries;
+    }
     const manifest = await this.fetch(config);
     const models = manifest.components?.filter((c: Component) => c.type === 'model') ?? [];
-    if (models.length !== 1 || models[0].role !== 'integrated') throw Error(`${config}: expected one integrated model`);
-    return { type: 'model', name: models[0].name, component: models[0], config, basePath: new URL('.', config).href };
+    const heads = models.filter((c: Component) => c.role === 'head');
+    const bodies = models.filter((c: Component) => c.role === 'body');
+    if (heads.length > 1 || bodies.length > 1) throw Error(`${config}: 不支持包含多个头部或多个身体的模型配置`);
+    if (!(models.length === 1 && models[0].role === 'integrated')
+        && !(models.length === 2 && heads.length === 1 && bodies.length === 1)) {
+      throw Error(`${config}: 需要一个完整模型，或同包内恰好一个头部和一个身体；暂不支持单独加载头部或身体`);
+    }
+    const selected = heads.length === 1 ? [heads[0], bodies[0]] : models;
+    return selected.map((component: Component) => ({ type: 'model', name: component.name, component, group: component.group,
+      config, basePath: new URL('.', config).href }));
   }
 
   isNamedReady(kind: 'motion' | 'expression', name: string) {
@@ -204,7 +241,21 @@ export function fixedGltfResources(base = document.baseURI) {
 }
 
 export async function resolveFigureConfig(url: string, base = document.baseURI) {
-  const original = new URL(url, base);
+  const paths = splitFigureConfigs(url);
+  if (paths.length === 2) {
+    const resolved = await Promise.all(paths.map(path => resolveSingleFigureConfig(path, base)));
+    if (resolved.some(item => !item.gltf)) throw Error('头身组合的两个配置都必须是 glTF 3D模型');
+    return { url: resolved.map(item => item.url).join('+'), gltf: true,
+      config: { components: resolved.flatMap(item => item.config.components) } };
+  }
+  return resolveSingleFigureConfig(url, base);
+}
+
+async function resolveSingleFigureConfig(url: string, base: string) {
+  // Bare package paths are relative to the figure root; stage paths and URLs
+  // already include their resource prefix and retain their ordinary resolution.
+  const absolute = /^(?:[a-z][a-z\d+.-]*:|\/|(?:\.\/)?game\/)/i.test(url);
+  const original = new URL(url, absolute ? base : new URL('./game/figure/', base));
   const figureRoot = new URL('./game/figure/', base);
   const resources = fixedGltfResources(base);
   const root = new URL('figure/', resources.root);

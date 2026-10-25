@@ -28,6 +28,73 @@ function fixture(files){
   return {catalog:new FixedGltfResources(base,fetcher),calls,fetcher};
 }
 
+test('figure packages select one integrated model or exactly one head and body',async()=>{
+  const config=url('figure/character/config.json');
+  for(const roles of [['integrated'],['head','body'],['body','head']]) {
+    const components=roles.map(role=>({type:'model',name:role,role,group:'garupa',model:`${role}.glb`}));
+    const {catalog}=fixture(new Map([[config,{components}]]));
+    assert.deepEqual((await catalog.models(config)).map(e=>e.component.role),roles.includes('body')?['head','body']:roles);
+    assert.ok((await catalog.models(config)).every(e=>e.group==='garupa'));
+    assert.equal((await catalog.model(config)).component.role,roles.includes('body')?'body':'integrated');
+  }
+  for(const roles of [[],['head'],['body'],['head','head'],['body','body'],['head','body','body'],
+    ['head','head','body'],['integrated','head','body'],['integrated','integrated'],['other']]) {
+    const {catalog}=fixture(new Map([[config,{components:roles.map(role=>({type:'model',name:role,role}))}]]));
+    await assert.rejects(catalog.models(config),roles.filter(r=>r==='head').length>1||roles.filter(r=>r==='body').length>1
+      ?/多个头部或多个身体/:/需要一个完整模型/);
+  }
+});
+
+test('composed paths select the head and body from their own packages and retain independent dependency bases',async()=>{
+  const headConfig=url('figure/first/config.json'),bodyConfig=url('figure/second/config.json');
+  const component=(role,name)=>({type:'model',role,name,model:`${role}.glb`,group:'garupa'});
+  const head=component('head','head'),body=component('body','body');
+  const {catalog,calls}=fixture(new Map([
+    [headConfig,{components:[head,component('body','unused-body')]}],
+    [bodyConfig,{components:[component('head','unused-head'),body]}],
+  ]));
+  const entries=await catalog.models(`${headConfig}+${bodyConfig}`);
+  assert.deepEqual(entries.map(e=>[e.component.role,e.name,e.config]),[['head','head',headConfig],['body','body',bodyConfig]]);
+  assert.equal(new URL(entries[0].component.model,entries[0].basePath).href,url('figure/first/head.glb'));
+  assert.equal(new URL(entries[1].component.model,entries[1].basePath).href,url('figure/second/body.glb'));
+  assert.equal((await catalog.model(`${headConfig}+${bodyConfig}`)).name,'body');
+  assert.deepEqual(calls,[headConfig,bodyConfig]);
+});
+
+test('composed paths reject missing roles, duplicates and malformed pairs',async()=>{
+  const a=url('figure/first/config.json'),b=url('figure/second/config.json');
+  const model=role=>({type:'model',role,group:'garupa'});
+  for (const [first,second,expected] of [
+    [['body'],['body'],/第一份配置必须包含一个头部/],
+    [['head'],['head'],/第二份配置必须包含一个身体/],
+    [['head','head'],['body'],/多个头部或多个身体/],
+    [['head'],['body','body'],/多个头部或多个身体/],
+    [['head','body','body'],['body'],/多个头部或多个身体/],
+  ]) {
+    const {catalog}=fixture(new Map([[a,{components:first.map(model)}],[b,{components:second.map(model)}]]));
+    await assert.rejects(catalog.models(`${a}+${b}`),expected);
+  }
+  const {catalog,calls}=fixture(new Map());
+  for(const value of [`${a}+`,`${a}+${b}+${a}`,`${a}+bad.glb`])
+    await assert.rejects(catalog.models(value),/必须指定两个 config.json/);
+  assert.deepEqual(calls,[]);
+});
+
+test('figure resolution expands each composed path from the resource root without requesting the joined filename',async t=>{
+  const originalFetch=global.fetch;t.after(()=>{global.fetch=originalFetch;});
+  const localBase='http://localhost/games/composed/';
+  const at=p=>new URL(`game/3d/figure/${p}/config.json`,localBase).href;
+  const {fetcher,calls}=fixture(new Map([
+    [at('头'),{components:[{type:'model',role:'head'}]}],
+    [at('body'),{components:[{type:'model',role:'body'}]}],
+  ]));
+  global.fetch=fetcher;
+  const resolved=await resolveFigureConfig('./game/figure/头/config.json+body/config.json',localBase);
+  assert.equal(resolved.gltf,true);assert.equal(resolved.url,`${at('头')}+${at('body')}`);
+  assert.deepEqual(calls,[at('头'),at('body')]);
+  assert.equal((await resolveFigureConfig(resolved.url,localBase)).url,resolved.url,'canonical path remains stable during restore');
+});
+
 test('model dependency preparation does not request the default motion', async () => {
   const json = Buffer.from(JSON.stringify({ materials: [] }));
   const glb = Buffer.alloc(20 + json.length);

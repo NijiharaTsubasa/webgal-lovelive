@@ -8,6 +8,7 @@ export interface GltfInitialState { motion?: string; expression?: string; focus?
 
 /** Package entry points are config.json; ordinary Live2D model.json is unaffected. */
 export function isGltfCharacterUrl(url: string): boolean {
+  if (/config\.json\+/i.test(url)) return true;
   return new URL(url, document.baseURI).pathname.endsWith('/config.json');
 }
 

@@ -37,6 +37,20 @@ const figure = (model,args={}) => sentence(C.changeFigure,model ? `game/${model}
 const say = () => sentence(C.say,'pause');
 const plan = (list,state=empty(),start=0,limit=20) => planGltfPreloads({sceneUrl:'test',sentenceList:list},start,state,'visit',limit);
 
+test('asset paths prefix both composed parts independently and scene prediction keeps the pair intact',()=>{
+  const {assetSetter,fileType}=load('Core/util/gameAssetsAccess/assetSetter.ts');
+  const pair='heads/a/config.json+bodies/b/config.json';
+  const expected='./game/figure/heads/a/config.json+./game/figure/bodies/b/config.json';
+  assert.equal(assetSetter(pair,fileType.figure),expected);
+  assert.equal(assetSetter('heads/a/config.json+https://cdn.test/b/config.json',fileType.figure),
+    './game/figure/heads/a/config.json+https://cdn.test/b/config.json');
+  const result=plan([sentence(C.changeFigure,expected,{next:true}),say()]);
+  assert.equal(result.requests[0].url,expected);
+  const restored=empty();restored.figName=expected;
+  assert.equal(plan([say()],restored).requests.length,0,'an unchanged restored figure needs no speculative replacement');
+  assert.equal(restored.figName,expected);
+});
+
 test('native expression combinations and whole-face selections survive script prediction and restored stage state verbatim', () => {
   for (const expression of ['3d:Sad%2FWink/Smile%25/A%20wide', '3d:face/happy%2F%E7%AC%91']) {
     const initial=plan([figure('a',{expression,next:true}),say()]);

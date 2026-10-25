@@ -25,6 +25,8 @@ export function resolveNameplate(stage: IStageState, rules: WebgalTemplate['name
   const path = freeFigure?.name ?? (stateKey ? stage[stateKey] : '');
   if (!path) return undefined;
   let normalized = path.replace(/\\/g, '/');
+  const bodyStart = normalized.search(/config\.json\+/i);
+  if (bodyStart >= 0) normalized = normalized.slice(0, bodyStart + 'config.json'.length);
   try {
     normalized = decodeURIComponent(normalized);
   } catch {

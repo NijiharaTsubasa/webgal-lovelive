@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "id": "webgal-lovelive.lovelive",
   "name": "WebGAL LoveLive",
-  "version": "0.1.0-beta.1",
+  "version": "0.2.0",
   "type": "custom",
   "webgalVersion": "4.6.4",
   "description": "LoveLive 专版引擎；基于 MyGO v3.2.1",
