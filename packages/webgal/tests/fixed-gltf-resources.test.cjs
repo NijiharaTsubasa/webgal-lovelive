@@ -28,6 +28,45 @@ function fixture(files){
   return {catalog:new FixedGltfResources(base,fetcher),calls,fetcher};
 }
 
+test('shared motion and expression references resolve directly before and after packaging',async()=>{
+  const remote='http://127.0.0.1:61543/webvideo-shared/token/library/';
+  const local='__shared/library/';
+  const motions=[['motion/stand.motionbin','motion',binary({motionGroup:'test'})],['mtn_exp/nod.mtn','garupa-motion','motion']];
+  for(const [name,type,content] of motions){
+    for(const [ref,target] of [[remote+name,remote+name],[local+name,url((type==='motion'?'motion/':'mtn_exp/')+local+name)]]){
+      const {catalog,calls}=fixture(new Map([[target,content]]));
+      const entry=await catalog.resolveMotion(ref);
+      assert.equal(entry.type,type);
+      assert.equal(entry.config,target);
+      assert.deepEqual(calls,[target]);
+    }
+  }
+  const expression='mtn_exp/smile.exp.json';
+  for(const [ref,target] of [[remote+expression,remote+expression],[local+expression,url('mtn_exp/'+local+expression)]]){
+    const {catalog,calls}=fixture(new Map([[target,{}]]));
+    assert.equal((await catalog.resolveExpression(ref)).config,target);
+    assert.deepEqual(calls,[target]);
+  }
+});
+
+test('shared model default motions are scoped to their own library and survive packaging and copy',async()=>{
+  const models=[
+    ['http://127.0.0.1:61543/webvideo-shared/token/first/figure/hero/config.json',
+      'http://127.0.0.1:61543/webvideo-shared/token/first/3d/motion/stand.motionbin','stand'],
+    [url('figure/__shared/second/figure/hero/config.json'),
+      url('figure/__shared/second/motion/stand.motionbin'),'stand'],
+    [url('figure/copied/hero/config.json'),url('figure/copied/motion/stand.motionbin'),'../motion/stand.motionbin'],
+  ];
+  const files=new Map();
+  for(const [config,motion,name] of models){
+    files.set(config,{components:[{type:'model',role:'integrated',name:'hero',defaultMotion:name}]});
+    files.set(motion,binary());
+  }
+  const {catalog,calls}=fixture(files);
+  for(const [config,motion] of models)assert.equal((await catalog.model(config)).component.defaultMotion,motion);
+  assert.ok(!calls.includes(url('motion/stand.motionbin')));
+});
+
 test('figure packages select one integrated model or exactly one head and body',async()=>{
   const config=url('figure/character/config.json');
   for(const roles of [['integrated'],['head','body'],['body','head']]) {

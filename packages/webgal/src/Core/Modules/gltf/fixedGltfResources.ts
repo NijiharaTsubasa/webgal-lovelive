@@ -113,6 +113,35 @@ export class FixedGltfResources {
     return models.find(entry => entry.component.role === 'body') ?? models[0];
   }
 
+  private async modelEntry(config: string, component: Component): Promise<FixedResourceEntry> {
+    const basePath = new URL('.', config).href;
+    const name = component.defaultMotion;
+    if (component.role !== 'head' && typeof name === 'string' && name) {
+      const packaged = config.startsWith(this.root) && /^figure\/(__shared\/[^/]+)\//.exec(config.slice(this.root.length));
+      const remote = new URL(config).pathname.match(/^\/webvideo-shared\/[^/]+\/[^/]+\//);
+      const library = packaged ? new URL(`figure/${packaged[1]}/`, this.root)
+        : remote ? new URL(remote[0], config) : null;
+      const candidates = /^\.\.?\//.test(name) ? [new URL(name, basePath).href] : [];
+      if (library && !candidates.length && !/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(name)) {
+        const paths = name.endsWith('.motionbin') ? [`motion/${name}`]
+          : [`mtn_exp/${name}.mtn`, `motion/${name}.motionbin`];
+        for (const path of paths) {
+          for (const prefix of ['3d/', '']) candidates.push(new URL(prefix + path, library).href);
+        }
+      }
+      for (const candidate of candidates) {
+        try {
+          await this.buffer(candidate);
+        } catch (error) {
+          if (error instanceof ResourceHttpError && error.status === 404) continue;
+        }
+        component = { ...component, defaultMotion: candidate };
+        break;
+      }
+    }
+    return { type: 'model', name: component.name, component, group: component.group, config, basePath };
+  }
+
   async models(config: string): Promise<FixedResourceEntry[]> {
     const paths = splitFigureConfigs(config);
     if (paths.length === 2) {
@@ -124,9 +153,7 @@ export class FixedGltfResources {
         if (heads.length > 1 || bodies.length > 1) throw Error(`${url}: 不支持包含多个头部或多个身体的模型配置`);
         const selected = index === 0 ? heads : bodies;
         if (selected.length !== 1) throw Error(`${url}: ${index === 0 ? '第一份配置必须包含一个头部' : '第二份配置必须包含一个身体'}`);
-        const component = selected[0];
-        return { type: 'model', name: component.name, component, group: component.group,
-          config: url, basePath: new URL('.', url).href };
+        return this.modelEntry(url, selected[0]);
       }));
       return entries;
     }
@@ -140,8 +167,7 @@ export class FixedGltfResources {
       throw Error(`${config}: 需要一个完整模型，或同包内恰好一个头部和一个身体；暂不支持单独加载头部或身体`);
     }
     const selected = heads.length === 1 ? [heads[0], bodies[0]] : models;
-    return selected.map((component: Component) => ({ type: 'model', name: component.name, component, group: component.group,
-      config, basePath: new URL('.', config).href }));
+    return Promise.all(selected.map((component: Component) => this.modelEntry(config, component)));
   }
 
   isNamedReady(kind: 'motion' | 'expression', name: string) {
@@ -186,13 +212,15 @@ export class FixedGltfResources {
   resolveMotion(name: string, { optional = false } = {}) { return this.resolveNamed('motion', name, optional); }
   resolveExpression(name: string, { optional = false } = {}) { return this.resolveNamed('expression', name, optional); }
   private async readMotion(name: string): Promise<FixedResourceEntry | null> {
-    const binary = name.endsWith('.motionbin');
-    let url = new URL(binary ? `motion/${name}` : `mtn_exp/${name}.mtn`, this.root).href;
+    const direct = /^https?:\/\//i.test(name);
+    const binary = (direct ? new URL(name).pathname : name).endsWith('.motionbin');
+    const materialized = name.startsWith('__shared/') && name.endsWith('.mtn');
+    let url = direct ? name : new URL(binary ? `motion/${name}` : `mtn_exp/${name}${materialized ? '' : '.mtn'}`, this.root).href;
     let type = binary ? 'motion' : 'garupa-motion';
     try { await this.buffer(url); }
     catch (error) {
       if (!(error instanceof ResourceHttpError) || error.status !== 404) throw error;
-      if (!binary) {
+      if (!binary && !direct && !materialized) {
         url = new URL(`motion/${name}.motionbin`, this.root).href; type = 'motion';
         try { await this.buffer(url); }
         catch (fallback) { if (fallback instanceof ResourceHttpError && fallback.status === 404) return null; throw fallback; }
@@ -217,7 +245,8 @@ export class FixedGltfResources {
   }
 
   private async readExpression(name: string) {
-    const url = new URL(`mtn_exp/${name}.exp.json`, this.root).href;
+    const materialized = name.startsWith('__shared/') && name.endsWith('.exp.json');
+    const url = /^https?:\/\//i.test(name) ? name : new URL(`mtn_exp/${name}${materialized ? '' : '.exp.json'}`, this.root).href;
     try { await this.buffer(url); }
     catch (error) { if (error instanceof ResourceHttpError && error.status === 404) return null; throw error; }
     const component = { type: 'garupa-expression', name, src: new URL(url).pathname.split('/').pop() };
