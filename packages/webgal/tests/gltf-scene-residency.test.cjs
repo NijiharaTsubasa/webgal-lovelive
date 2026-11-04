@@ -788,3 +788,63 @@ test('ready reservation survives an outdated background prediction, and cancella
   assert.equal(active.isActive,true); assert.equal(active.actor.surface.active,active.actor);
   f.hooks.releaseScene(); assert.equal(f.actors[1].disposed,true);
 });
+
+test('preview jumps and live edits release obsolete actors after their exits', async () => {
+  const f = fixture();
+  const hidden = '/hidden/config.json';
+  f.setPlan({batches: [
+    [{key:'lead', figure:{url:a}}],
+    [{key:'lead', figure:{url:hidden}}],
+  ]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'}, f.state([]), f.signal());
+  await f.hooks.prepareStage(f.state([['lead', a]]), f.signal());
+  let previous = f.take('lead', a);
+  for (const [sceneUrl, url] of [['other.txt', b], ['other.txt', '/edited/config.json']]) {
+    f.sceneData.currentScene = {sceneUrl};
+    f.sceneData.currentSentenceId = 1;
+    const state = f.state([['lead', url]]);
+    await f.hooks.prepareStage(state, f.signal());
+    const next = f.take('lead', url);
+    f.hooks.commitPreview({sceneUrl, sentenceList:[]}, state, 1);
+    assert.equal(previous.actor.disposed, false, 'exit still owns its actor');
+    previous.dispose();
+    assert.equal(previous.actor.disposed, true);
+    assert.equal(next.actor.disposed, false);
+    assert.equal(f.actors.filter(actor => !actor.disposed).length, 1);
+    previous = next;
+  }
+});
+
+test('scene entry releases unused hidden GPU actors before creating new ones', async () => {
+  const f = fixture();
+  f.setPlan({batches:[[{key:'lead', figure:{url:a}}]]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'}, f.state([]), f.signal());
+  const old = f.actors[0];
+  f.setPlan({batches:[[{key:'lead', figure:{url:b}}]]});
+  f.onCreate(() => assert.equal(old.disposed, true));
+  await f.hooks.prepareScene({sceneUrl:'next.txt'}, f.state([]), f.signal());
+  assert.equal(f.actors.length, 2);
+});
+
+test('each retired actor releases its GPU surface as soon as its own exit finishes', async () => {
+  const f = fixture();
+  const state = f.state([['left', a], ['right', b]]);
+  await f.hooks.prepareStage(state, f.signal());
+  const left = f.take('left', a), right = f.take('right', b);
+  f.hooks.releaseScene();
+  left.dispose();
+  assert.equal(left.actor.surface.disposed, true);
+  assert.equal(right.actor.surface.disposed, false);
+  right.dispose();
+  assert.equal(right.actor.surface.disposed, true);
+});
+
+test('switching loading modes on an empty stage releases the previous preload set', async () => {
+  const f = fixture();
+  f.setPlan({batches:[[{key:'lead', figure:{url:a}}]]});
+  await f.hooks.prepareScene({sceneUrl:'scene.txt'}, f.state([]), f.signal());
+  f.setMode('on-demand');
+  assert.equal(f.hooks.tryPrepareStage(f.state([]), f.signal()), true);
+  assert.equal(f.actors[0].disposed, true);
+  assert.equal(f.surfaces[0].disposed, true);
+});

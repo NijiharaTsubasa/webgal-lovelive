@@ -5,7 +5,7 @@ import { webgalStore } from '@/store/store';
 import { WebGAL } from '@/Core/WebGAL';
 import { stageStateManager } from '@/Core/Modules/stage/stageStateManager';
 import cloneDeep from 'lodash/cloneDeep';
-import { beginCharacterLoading, cancelCharacterLoading, isCharacterLoadingBusy, prepareStageCharacters, tryPrepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
+import { beginCharacterLoading, cancelCharacterLoading, commitPreviewCharacters, isCharacterLoadingBusy, prepareStageCharacters, tryPrepareStageCharacters } from '@/Core/util/sceneCharacterLoading';
 
 /**
  * 执行一次推进前检查。
@@ -89,6 +89,7 @@ const commitPreparedForward = () => {
 };
 
 interface PendingBatch {
+  preview: boolean;
   stage: ReturnType<typeof stageStateManager.getCalculationStageState>;
   scene: typeof WebGAL.sceneManager.sceneData.currentScene;
   cursor: number;
@@ -101,8 +102,9 @@ export const cancelPendingForward = () => {
 };
 
 /** Prepare one already evaluated batch; retries never execute its scripts again. */
-export const commitForward = async (): Promise<void> => {
+export const commitForward = async (preview = false): Promise<void> => {
   const batch = pendingBatch ??= {
+    preview,
     stage: cloneDeep(stageStateManager.getCalculationStageState()),
     scene: WebGAL.sceneManager.sceneData.currentScene,
     cursor: WebGAL.sceneManager.sceneData.currentSentenceId,
@@ -112,6 +114,7 @@ export const commitForward = async (): Promise<void> => {
     stageStateManager.replaceCalculationStageState(batch.stage);
     pendingBatch = undefined;
     commitPreparedForward();
+    if (batch.preview) commitPreviewCharacters(batch.scene, batch.stage, batch.cursor);
     return;
   }
   const ticket = beginCharacterLoading('stage');
@@ -127,6 +130,7 @@ export const commitForward = async (): Promise<void> => {
     pendingBatch = undefined;
     ticket.succeed();
     commitPreparedForward();
+    if (batch.preview) commitPreviewCharacters(batch.scene, batch.stage, batch.cursor);
   } catch (error) {
     if (!ticket.isCurrent()) return;
     batch.attempt = undefined;

@@ -208,7 +208,7 @@ export async function runFastPreview(
     return null;
   }
 
-  await commitForward();
+  await commitForward(true);
 
   const forwardedLineCount =
     WebGAL.sceneManager.sceneData.currentScene.sceneName === currentSceneName

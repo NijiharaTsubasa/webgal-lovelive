@@ -13,7 +13,6 @@ type Surface = import('webgal-lovelive-gltf-renderer').CharacterRenderSurface;
 interface Resident { identity: string; runtime: GltfCharacterRuntime; actor: import('webgal-lovelive-gltf-renderer').OffscreenCharacter; slot: number; lastUse: number; warmedMotion?: string; warmedExpression?: string; backgroundReady?: boolean }
 interface Residency { surfaces: Surface[]; residents: Resident[]; active: Set<Resident>; retired: boolean; mode: string; sceneUrl?: string; slotSchedule?: Map<number, Map<string, number | undefined>> }
 let current: Residency | undefined;
-const retired = new Set<Residency>();
 const prepared = new Map<string, Resident>();
 interface PreparationTask { run: () => Promise<unknown>; resolve: (value: any) => void; reject: (error: unknown) => void }
 const foregroundTasks: PreparationTask[] = [], backgroundTasks: PreparationTask[] = [];
@@ -26,7 +25,10 @@ const nativeConfigUrls = new Set<string>();
 async function isGltfConfig(url: string) {
   if (nativeConfigUrls.has(url)) return false;
   const result = (await resolveFigureConfig(url)).gltf;
-  if (!result) nativeConfigUrls.add(url);
+  if (!result) {
+    if (nativeConfigUrls.size >= 256) nativeConfigUrls.delete(nativeConfigUrls.values().next().value!);
+    nativeConfigUrls.add(url);
+  }
   return result;
 }
 const namedInputs = (figure: ProjectedGltfFigure) => [
@@ -54,12 +56,11 @@ function destroy(residency: Residency) {
   if (residency.active.size) return;
   for (const surface of residency.surfaces) surface?.dispose();
   residency.residents.length = 0;
-  retired.delete(residency);
 }
 function retire(residency: Residency | undefined) {
   if (!residency) return;
   residency.retired = true;
-  retired.add(residency);
+  for (const record of [...residency.residents]) if (!residency.active.has(record)) releaseResident(residency, record);
   destroy(residency);
 }
 function releaseResident(owner: Residency, record: Resident) {
@@ -116,7 +117,7 @@ async function addResident(owner: Residency, slot: number, key: string, figure: 
   const runtime = new GltfCharacterRuntime(actor, figure, () => {
     owner.active.delete(record);
     surface.deactivate(actor);
-    if (!owner.retired && (owner.mode === 'on-demand' || pastLastUse(owner, record))) releaseResident(owner, record);
+    if (owner.retired || owner.mode === 'on-demand' || pastLastUse(owner, record)) releaseResident(owner, record);
     if (owner.retired) destroy(owner);
   });
   runtime.suspend();
@@ -184,6 +185,12 @@ async function prepareRestore(scene: IScene, state: IStageState, line: number, s
     if (unchanged && tryPrepareStage(state, signal)) return;
   }
   const plan = planGltfSceneResidency(scene, state, line);
+  assertCurrent(signal);
+  const needed = new Set(stageFigures(state).map(({key, figure}) => gltfFigureIdentity(key, figure)));
+  for (const {key, figure} of plan.appearances.values()) needed.add(gltfFigureIdentity(key, figure));
+  for (const record of [...owner.residents]) {
+    if (!owner.active.has(record) && !needed.has(record.identity)) releaseResident(owner, record);
+  }
   const originals = new Map(owner.residents.map(record => [record, record.lastUse]));
   const originalSurfaces = new Set(owner.surfaces);
   const originalUrl = owner.sceneUrl;
@@ -410,7 +417,9 @@ function tryPrepareStage(state: IStageState, signal: AbortSignal, slots?: Map<st
   const targets = stageFigures(state).filter(({figure}) => /\/config\.json(?:[?#].*)?$/.test(figure.url)
     && !nativeConfigUrls.has(figure.url));
   if (!targets.length) {
-    if (current) for (const record of [...current.residents]) {
+    if (current && current.mode !== getCharacterLoadingMode()) {
+      releaseScene();
+    } else if (current) for (const record of [...current.residents]) {
       if (!current.active.has(record) && !prepared.has(record.identity) && pastLastUse(current, record)) releaseResident(current, record);
     }
     return true;
@@ -561,6 +570,23 @@ export function hasPreparedGltfCharacter(key: string, url: string, position: Pro
   return prepared.has(gltfFigureIdentity(key, { url, position, bounds } as ProjectedGltfFigure));
 }
 
+function commitPreview(scene: IScene, state: IStageState, cursor: number) {
+  const owner = current;
+  if (!owner || owner.mode !== 'scene') return;
+  const plan = planGltfSceneResidency(scene, state, cursor);
+  const lastUses = new Map<string, number>();
+  for (const {key, figure, lastUse} of plan.appearances.values()) {
+    const identity = gltfFigureIdentity(key, figure);
+    lastUses.set(identity, Math.max(lastUses.get(identity) ?? -Infinity, lastUse));
+  }
+  owner.sceneUrl = scene.sceneUrl;
+  owner.slotSchedule = undefined;
+  for (const record of [...owner.residents]) {
+    record.lastUse = lastUses.get(record.identity) ?? -Infinity;
+    if (!owner.active.has(record) && !lastUses.has(record.identity)) releaseResident(owner, record);
+  }
+}
+
 function releaseScene() {
   prediction?.abort();
   predictionSignature = '';
@@ -569,7 +595,6 @@ function releaseScene() {
   const owner = current;
   current = undefined;
   if (!owner) return;
-  for (const record of [...owner.residents]) if (!owner.active.has(record)) releaseResident(owner, record);
   retire(owner);
 }
 registerSceneCharacterLoadingHooks({
@@ -584,5 +609,6 @@ registerSceneCharacterLoadingHooks({
     prediction?.abort(); predictionSignature = '';
     return serialize(() => prepareRestore(scene, state, line, signal));
   },
+  commitPreview,
   releaseScene,
 });

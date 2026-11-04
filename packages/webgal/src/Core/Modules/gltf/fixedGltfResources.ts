@@ -1,4 +1,6 @@
 type Component = Record<string, any>;
+const MAX_CACHE_ENTRIES = 256;
+const MAX_CACHE_BYTES = 64 * 1024 * 1024;
 /** A composed figure keeps each config path independent of the other package. */
 export function splitFigureConfigs(value: string): string[] {
   const parts = value.split(/(?<=config\.json)\+/i);
@@ -27,7 +29,7 @@ export class FixedGltfResources {
   private bytes = new Map<string, ArrayBuffer>();
   private json = new Map<string, any>();
   private named = new Map<string, Promise<FixedResourceEntry | null>>();
-  private namedEntries = new Map<string, FixedResourceEntry | null>();
+  private namedEntries = new Map<string, FixedResourceEntry>();
   private nativeExpressions = new Set<string>();
   private cachedBytes = 0;
   private loaded?: Promise<this>;
@@ -46,8 +48,8 @@ export class FixedGltfResources {
         const response = await this.request.call(globalThis, url);
         if (!response.ok) throw new ResourceHttpError(response.status, url);
         const value = await response.arrayBuffer();
-        if (value.byteLength <= 64 * 1024 * 1024) {
-          while (this.bytes.size && (this.bytes.size >= 256 || this.cachedBytes + value.byteLength > 64 * 1024 * 1024)) {
+        if (value.byteLength <= MAX_CACHE_BYTES) {
+          while (this.bytes.size && (this.bytes.size >= MAX_CACHE_ENTRIES || this.cachedBytes + value.byteLength > MAX_CACHE_BYTES)) {
             const oldest = this.bytes.keys().next().value as string;
             this.cachedBytes -= this.bytes.get(oldest)!.byteLength; this.bytes.delete(oldest); this.json.delete(oldest);
           }
@@ -151,19 +153,30 @@ export class FixedGltfResources {
     return !!entry && this.bytes.has(entry.config);
   }
   markNamedReady(kind: 'motion' | 'expression', name: string) {
-    if (kind === 'expression' && name.startsWith('3d:')) this.nativeExpressions.add(name);
+    if (kind !== 'expression' || !name.startsWith('3d:')) return;
+    this.nativeExpressions.delete(name);
+    this.nativeExpressions.add(name);
+    if (this.nativeExpressions.size > MAX_CACHE_ENTRIES) this.nativeExpressions.delete(this.nativeExpressions.values().next().value!);
   }
   private async resolveNamed(kind: 'motion' | 'expression', name: string, optional: boolean) {
     const key = `${kind}:${name}`;
+    const cached = this.namedEntries.get(key);
+    if (cached && this.bytes.has(cached.config)) {
+      this.namedEntries.delete(key);
+      this.namedEntries.set(key, cached);
+      return cached;
+    }
     let pending = this.named.get(key);
     if (!pending) {
       pending = (kind === 'motion' ? this.readMotion(name) : this.readExpression(name)).then(entry => {
-        if (entry) this.namedEntries.set(key, entry);
-        else this.named.delete(key);
+        if (entry && this.bytes.has(entry.config)) {
+          this.namedEntries.set(key, entry);
+          if (this.namedEntries.size > MAX_CACHE_ENTRIES) this.namedEntries.delete(this.namedEntries.keys().next().value!);
+        }
         return entry;
       });
       this.named.set(key, pending);
-      void pending.catch(() => { if (this.named.get(key) === pending) this.named.delete(key); });
+      void pending.finally(() => { if (this.named.get(key) === pending) this.named.delete(key); }).catch(() => {});
     }
     const entry = await pending;
     if (!entry && !optional) throw new ResourceHttpError(404, new URL(kind === 'motion'
@@ -236,8 +249,11 @@ export class FixedGltfResources {
 const catalogs = new Map<string, FixedGltfResources>();
 export function fixedGltfResources(base = document.baseURI) {
   const root = new URL('./game/3d/', base).href;
-  if (!catalogs.has(root)) catalogs.set(root, new FixedGltfResources(base));
-  return catalogs.get(root)!;
+  const catalog = catalogs.get(root) ?? new FixedGltfResources(base);
+  catalogs.delete(root);
+  catalogs.set(root, catalog);
+  if (catalogs.size > 4) catalogs.delete(catalogs.keys().next().value!);
+  return catalog;
 }
 
 export async function resolveFigureConfig(url: string, base = document.baseURI) {

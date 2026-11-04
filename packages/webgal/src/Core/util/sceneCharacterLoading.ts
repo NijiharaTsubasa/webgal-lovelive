@@ -13,6 +13,7 @@ export interface SceneCharacterLoadingHooks {
   prepareStage(stage: IStageState, signal: AbortSignal): Promise<void>;
   prepareScene(scene: IScene, state: IStageState, signal: AbortSignal): Promise<void>;
   prepareRestore?(scene: IScene, state: IStageState, line: number, signal: AbortSignal): Promise<void>;
+  commitPreview?(scene: IScene, state: IStageState, cursor: number): void;
   releaseScene?(): void;
 }
 let hooks: SceneCharacterLoadingHooks | undefined;
@@ -26,6 +27,9 @@ const publish = (next: CharacterLoadingStatus) => {
   for (const listener of listeners) listener(status);
 };
 export function registerSceneCharacterLoadingHooks(value: SceneCharacterLoadingHooks) { hooks = value; }
+export function commitPreviewCharacters(scene: IScene, state: IStageState, cursor: number) {
+  hooks?.commitPreview?.(scene, state, cursor);
+}
 export function releaseSceneCharacters() { hooks?.releaseScene?.(); }
 export function getCharacterLoadingMode() { return mode; }
 export function setCharacterLoadingMode(value: CharacterLoadingMode) {

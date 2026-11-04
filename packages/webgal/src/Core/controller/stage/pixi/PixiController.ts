@@ -622,9 +622,16 @@ export default class PixiStage {
       if (disposed) return;
       disposed = true;
       app?.ticker.remove(tick);
-      runtime?.dispose();
-      texture?.destroy(true);
-      object.gltfRuntime = undefined;
+      try {
+        runtime?.dispose();
+      } catch (error) {
+        logger.error('glTF character disposal failed', error);
+      } finally {
+        runtime = undefined;
+        object.gltfRuntime = undefined;
+        texture?.destroy(true);
+        texture = undefined;
+      }
     };
     // A container may also be destroyed by an owner other than removeStageObjectByKey.
     container.once('destroyed', object.disposeGltf);

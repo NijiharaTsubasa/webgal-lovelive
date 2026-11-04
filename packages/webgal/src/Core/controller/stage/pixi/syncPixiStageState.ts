@@ -261,7 +261,7 @@ function removeBg(bgObject: IStageObject, skipAnimation: boolean): number {
     return 0;
   }
   const oldBgKey = bgObject.key;
-  bgObject.key = 'bg-main-off' + String(new Date().getTime());
+  bgObject.key = 'bg-main-off-' + bgObject.uuid;
   const bgKey = bgObject.key;
   const bgAniKey = bgObject.key + '-softoff';
   pixiStage.removeStageObjectByKey(oldBgKey);
@@ -287,11 +287,11 @@ function removeFig(figObj: IStageObject, enterTikerKey: string, skipAnimation: b
   }
   const oldFigKey = figObj.key;
   const figLeaveAniKey = oldFigKey + '-off';
-  figObj.key = oldFigKey + String(new Date().getTime()) + '-off';
+  figObj.key = oldFigKey + '-' + figObj.uuid + '-off';
   const figKey = figObj.key;
   pixiStage.removeStageObjectByKey(oldFigKey);
   const leaveKey = figKey + '-softoff';
-  // 退出对象的 key 带时间戳，永远不在 effects 白名单里，因此与背景一样走普通动画通道即可
+  // 退出对象的 key 带实例 UUID，永远不在 effects 白名单里，因此与背景一样走普通动画通道即可
   const { duration, animation } = getExitAnimation(figLeaveAniKey, false, figKey);
   pixiStage.registerAnimation(animation, leaveKey, figKey);
   setTimeout(() => {

@@ -228,3 +228,18 @@ test('figure config prefers 3d, falls back to 2d only on 404 and classifies cont
   await assert.rejects(resolveFigureConfig('game/figure/broken/config.json',base),SyntaxError);
   assert.ok(!calls.includes(new URL('game/figure/broken/config.json',base).href));
 });
+
+test('named motion metadata is rediscovered after its payload leaves the cache', async () => {
+  const target = url('motion/pose.motionbin');
+  const files = new Map([[target, binary({name:'old'})]]);
+  const {catalog} = fixture(files);
+  assert.equal((await catalog.resolveMotion('pose.motionbin')).component.name, 'old');
+  for (let index = 0; index < 256; index++) {
+    const entry = url(`figure/${index}/config.json`);
+    files.set(entry, {});
+    await catalog.fetch(entry);
+  }
+  assert.equal(catalog.isNamedReady('motion', 'pose.motionbin'), false);
+  files.set(target, binary({name:'new'}));
+  assert.equal((await catalog.resolveMotion('pose.motionbin')).component.name, 'new');
+});
