@@ -21,7 +21,7 @@ const compiled = ts.transpileModule(`class Stage { ${method} }`, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const makeStage = new Function('PIXI', 'WebGALPixiContainer', 'uuid', 'stageStateManager',
-  'createGltfCharacter', 'GltfCharacterSprite', 'baseBlinkParam', 'logger', 'takePreparedGltfCharacter', 'normalizeFigureBounds', 'baseFocusParam', compiled + '\nreturn Stage;');
+  'createGltfCharacter', 'GltfCharacterSprite', 'baseBlinkParam', 'logger', 'takePreparedGltfCharacter', 'normalizeFigureBounds', 'baseFocusParam', 'offlineExportHost', compiled + '\nreturn Stage;');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function deferred() {
   let resolve, reject;

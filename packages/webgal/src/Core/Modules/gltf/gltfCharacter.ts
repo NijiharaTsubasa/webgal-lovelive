@@ -161,6 +161,11 @@ export class GltfCharacterRuntime {
   public update(delta: number) {
     if (this.isActive) this.character.update(delta);
   }
+  public renderCurrentPose() {
+    if (!this.isReady) throw new Error('glTF pose is not ready to render');
+    this.character.renderCurrentPose();
+  }
+
   public dispose() {
     if (this.disposed) return;
     this.disposed = true;

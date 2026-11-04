@@ -1,3 +1,4 @@
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 import { ISentence } from '@/Core/controller/scene/sceneInterface';
 import { initPerform, IPerform } from '@/Core/Modules/perform/performInterface';
 
@@ -9,6 +10,7 @@ import { scriptRegistry, SCRIPT_TAG_MAP, ScriptFunction } from '@/Core/parser/sc
  * @param script 调用的语句
  */
 export const runScript = (script: ISentence) => {
+  offlineExportHost?.observe(script);
   let perform: IPerform = initPerform;
   const funcToRun: ScriptFunction = scriptRegistry[script.command]?.scriptFunction ?? SCRIPT_TAG_MAP.say.scriptFunction; // 默认是say
 

@@ -5,7 +5,7 @@ interface IAudioContextWrapper {
   source: MediaElementAudioSourceNode | null;
   analyser: AnalyserNode | undefined;
   dataArray: Uint8Array | undefined;
-  audioLevelInterval: ReturnType<typeof setInterval>;
+  audioLevelInterval: ReturnType<typeof setInterval> | undefined;
   blinkTimerID: ReturnType<typeof setTimeout>;
   maxAudioLevel: number;
   smoothedMouthValue: number;
@@ -17,7 +17,7 @@ export const audioContextWrapper: IAudioContextWrapper = {
   source: null,
   analyser: undefined,
   dataArray: undefined,
-  audioLevelInterval: setInterval(() => {}, 0), // dummy interval
+  audioLevelInterval: undefined,
   blinkTimerID: setTimeout(() => {}, 0), // dummy timeout
   maxAudioLevel: 0,
   smoothedMouthValue: 0,

@@ -1,3 +1,4 @@
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 import { scriptExecutor, type ScriptExecutionOptions } from './scriptExecutor';
 import { logger } from '../../util/logger';
 import { webgalStore } from '@/store/store';
@@ -168,6 +169,7 @@ export const continueSentence = async () => {
  * 如果当前存在可提前结束的普通演出，本次用户推进只结束演出，不再继续执行下一条语句。
  */
 export const nextSentence = async () => {
+  if (offlineExportHost?.beforeNext() === false) return;
   if (isCharacterLoadingBusy()) return;
   WebGAL.events.userInteractNext.emit();
 

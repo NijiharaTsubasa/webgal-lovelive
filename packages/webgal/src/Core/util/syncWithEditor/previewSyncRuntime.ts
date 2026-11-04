@@ -1,3 +1,4 @@
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 import {
   createEventEnvelope,
   createRequestEnvelope,
@@ -441,6 +442,7 @@ export const startPreviewSyncRuntime = () => {
     },
   };
 
+  offlineExportHost?.commands(previewCommandHandlers);
   const isPreviewQueryEnvelope = (envelope: PreviewRequestEnvelope): envelope is PreviewQueryEnvelope => {
     return isPreviewQueryType(envelope.type);
   };

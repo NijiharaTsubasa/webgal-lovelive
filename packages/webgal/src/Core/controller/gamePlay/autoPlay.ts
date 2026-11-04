@@ -1,3 +1,4 @@
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 // import {logger} from '../../util/logger';
 import styles from '@/UI/BottomControlPanel/bottomControlPanel.module.scss';
 import { webgalStore } from '@/store/store';
@@ -77,6 +78,6 @@ const autoPlay = () => {
   }
   // nextSentence();
   if (WebGAL.gameplay.autoTimeout === null) {
-    WebGAL.gameplay.autoTimeout = setTimeout(autoNextSentence, autoPlayDelay);
+    WebGAL.gameplay.autoTimeout = (offlineExportHost?.scheduleAuto ?? setTimeout)(autoNextSentence, autoPlayDelay);
   }
 };

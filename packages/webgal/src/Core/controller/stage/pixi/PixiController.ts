@@ -1,3 +1,4 @@
+import { offlineExportHost, scheduleAssetMount } from '@/Core/util/offlineExportHost';
 import {
   getFigureBaseX,
   normalizeFigureBounds,
@@ -405,7 +406,7 @@ export default class PixiStage {
     const setup = () => {
       // TODO：找一个更好的解法，现在的解法是无论是否复用原来的资源，都设置一个延时以让动画工作正常！
 
-      setTimeout(() => {
+      scheduleAssetMount(() => {
         const texture = loader.resources?.[url]?.texture;
         if (texture && this.getStageObjByUuid(bgUuid)) {
           /**
@@ -422,7 +423,7 @@ export default class PixiStage {
           });
           this.requestRender();
         }
-      }, 0);
+      });
     };
 
     /**
@@ -473,7 +474,7 @@ export default class PixiStage {
     const setup = () => {
       // TODO：找一个更好的解法，现在的解法是无论是否复用原来的资源，都设置一个延时以让动画工作正常！
 
-      setTimeout(() => {
+      scheduleAssetMount(() => {
         console.debug('start loaded video: ' + url);
         const video = document.createElement('video');
         const videoResource = new PIXI.VideoResource(video);
@@ -501,7 +502,7 @@ export default class PixiStage {
             });
           });
         }
-      }, 0);
+      });
     };
 
     /**
@@ -553,7 +554,7 @@ export default class PixiStage {
     // 完成图片加载后执行的函数
     const setup = () => {
       // TODO：找一个更好的解法，现在的解法是无论是否复用原来的资源，都设置一个延时以让动画工作正常！
-      setTimeout(() => {
+      scheduleAssetMount(() => {
         const texture = loader.resources?.[url]?.texture;
         if (texture && this.getStageObjByUuid(figureUuid)) {
           /**
@@ -571,7 +572,7 @@ export default class PixiStage {
           this.notifyTargetReferenceBoxChanged(key);
           this.requestRender();
         }
-      }, 0);
+      });
     };
 
     /**
@@ -588,6 +589,26 @@ export default class PixiStage {
 
   // 聚合模型
   /* eslint-disable complexity */
+  public flushGltfTextures() {
+    for (const figure of this.figureObjects) {
+      if (!figure.gltfRuntime?.isActive) continue;
+      for (const child of figure.pixiContainer?.children ?? []) {
+        const renderer = this.currentApp?.renderer;
+        if (child instanceof GltfCharacterSprite && renderer instanceof PIXI.Renderer) renderer.texture.bind(child.texture.baseTexture);
+      }
+    }
+  }
+
+  public renderGltfPoses() {
+    for (const figure of this.figureObjects) {
+      if (!figure.gltfRuntime?.isActive) continue;
+      figure.gltfRuntime.renderCurrentPose();
+      for (const child of figure.pixiContainer?.children ?? []) {
+        if (child instanceof GltfCharacterSprite) child.texture.baseTexture.update();
+      }
+    }
+  }
+
   public addGltfFigure(key: string, url: string, presetPosition: IFigurePosition = 'center') {
     this.removeStageObjectByKey(key);
     const container = new WebGALPixiContainer();
@@ -690,6 +711,7 @@ export default class PixiStage {
         object.disposeGltf?.();
         // Remove only this failed instance, including if it was renamed for its exit.
         if (this.getStageObjByUuid(object.uuid)) this.removeStageObjectByKey(object.key);
+        offlineExportHost?.characterFailed(error);
         logger.error('glTF character load failed', error);
       };
     if (prepared) void attach(prepared, true).catch(failed);
@@ -893,7 +915,7 @@ export default class PixiStage {
     });
 
     // 延迟一帧加载避免卡顿
-    setTimeout(() => {
+    scheduleAssetMount(() => {
       const video = document.createElement('video');
       video.src = url;
       video.crossOrigin = 'anonymous';
@@ -923,7 +945,7 @@ export default class PixiStage {
       video.onerror = (e) => {
         console.error('视频加载失败喵！', e);
       };
-    }, 0);
+    });
   }
 
   /**
