@@ -4,6 +4,7 @@ import s from './translation.module.scss';
 import languages, { language } from '@/config/language';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 
 export default function Translation() {
   const setLanguage = useLanguage();
@@ -59,7 +60,7 @@ export default function Translation() {
 
   return (
     <>
-      {isShowSelectLanguage && (
+      {isShowSelectLanguage && !offlineExportHost && (
         <div className={s.trans}>
           <div className={s.langWrapper}>
             <div className={s.lang}>LANGUAGE SELECT</div>
