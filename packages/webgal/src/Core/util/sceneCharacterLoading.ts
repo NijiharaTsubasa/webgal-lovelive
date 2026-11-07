@@ -1,4 +1,5 @@
 import type { IScene } from '@/Core/controller/scene/sceneInterface';
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 import type { IStageState } from '@/Core/Modules/stage/stageInterface';
 
 export type CharacterLoadingMode = 'scene' | 'on-demand';
@@ -31,7 +32,7 @@ export function commitPreviewCharacters(scene: IScene, state: IStageState, curso
   hooks?.commitPreview?.(scene, state, cursor);
 }
 export function releaseSceneCharacters() { hooks?.releaseScene?.(); }
-export function getCharacterLoadingMode() { return mode; }
+export function getCharacterLoadingMode(): CharacterLoadingMode { return offlineExportHost ? 'on-demand' : mode; }
 export function setCharacterLoadingMode(value: CharacterLoadingMode) {
   if (value !== 'scene' && value !== 'on-demand') throw Error('Invalid character loading mode');
   mode = value;
@@ -78,7 +79,7 @@ export function tryPrepareStageCharacters(stage: IStageState, signal: AbortSigna
   return !signal.aborted && hooks?.tryPrepareStage?.(stage, signal) === true;
 }
 export async function prepareSceneCharacters(scene: IScene, state: IStageState, signal: AbortSignal) {
-  if (signal.aborted || mode !== 'scene') return;
+  if (signal.aborted || getCharacterLoadingMode() !== 'scene') return;
   await hooks?.prepareScene(scene, state, signal);
 }
 export async function prepareRestoredCharacters(scene: IScene, state: IStageState, line: number, signal: AbortSignal) {

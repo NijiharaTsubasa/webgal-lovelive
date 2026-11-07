@@ -90,3 +90,17 @@ test('auto-play removes a pending timer during loading and schedules a fresh del
   auto.stopAuto();
  }finally{Object.assign(global,saved);}
 });
+
+
+test('offline export uses on-demand residency without changing the stored playback preference',async()=>{
+ const f=fixture();f.mocks['Core/util/offlineExportHost.ts']={offlineExportHost:{}};
+ const loading=f.load('Core/util/sceneCharacterLoading.ts');let scenePreparations=0,stagePreparations=0;
+ loading.setCharacterLoadingMode('scene');
+ loading.registerSceneCharacterLoadingHooks({prepareScene:async()=>{scenePreparations++;},prepareStage:async()=>{stagePreparations++;}});
+ assert.equal(loading.getCharacterLoadingMode(),'on-demand');
+ await loading.prepareSceneCharacters({}, {},new AbortController().signal);
+ await loading.prepareStageCharacters({},new AbortController().signal);
+ assert.equal(scenePreparations,0);assert.equal(stagePreparations,1);
+ f.mocks['Core/util/offlineExportHost.ts'].offlineExportHost=undefined;
+ assert.equal(loading.getCharacterLoadingMode(),'scene');
+});

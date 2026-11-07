@@ -1,4 +1,5 @@
 import type { IScene } from '@/Core/controller/scene/sceneInterface';
+import { offlineExportHost } from '@/Core/util/offlineExportHost';
 import { type IStageState } from '@/Core/Modules/stage/stageInterface';
 import { WebGAL } from '@/Core/WebGAL';
 import { registerSceneCharacterLoadingHooks, getCharacterLoadingMode } from '@/Core/util/sceneCharacterLoading';
@@ -495,6 +496,7 @@ async function prepareDisplayedStage(state: IStageState, signal: AbortSignal, sl
 
 /** Warm the next reachable groups without publishing loading state or touching displayed canvases. */
 export function prewarmGltfPredictions(batches: Array<Array<{ key: string; figure: ProjectedGltfFigure }>>) {
+  if (offlineExportHost) return Promise.resolve();
   const signature = JSON.stringify([getCharacterLoadingMode(), batches]);
   if (signature === predictionSignature && !prediction?.signal.aborted) return predictionWork;
   predictionSignature = signature;

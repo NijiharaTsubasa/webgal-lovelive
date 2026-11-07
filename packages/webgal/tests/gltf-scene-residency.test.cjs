@@ -25,7 +25,7 @@ function moduleFrom(file, imports, cache = new Map()) {
   });
   return exports;
 }
-function fixture() {
+function fixture(offlineExport = false) {
   let hooks, mode = 'scene', plan = { batches: [], named: [] }, prepareFailure, onPrepare, onCreate;
   const actors = [], surfaces = [], displayed = new Map(), checks = { configs: 0, named: 0 };
   class Surface {
@@ -74,7 +74,8 @@ function fixture() {
     },
     '@/Core/WebGAL': { WebGAL: { stageWidth:1920, stageHeight:1080, sceneManager:{sceneData}, gameplay:{pixiStage:{getStageObjByKey: key => displayed.get(key)}} } },
     '@/Core/live2DCore': {baseFocusParam:{x:0,y:0,instant:false}},
-    '@/Core/util/sceneCharacterLoading': { registerSceneCharacterLoadingHooks(value) { hooks = value; }, getCharacterLoadingMode: () => mode },
+    '@/Core/util/sceneCharacterLoading': { registerSceneCharacterLoadingHooks(value) { hooks = value; }, getCharacterLoadingMode: () => offlineExport ? 'on-demand' : mode },
+    '@/Core/util/offlineExportHost': {offlineExportHost: offlineExport ? {} : undefined},
     './gltfCharacter': { GltfCharacterRuntime:Runtime, characterOptions:async url => ({modelUrl:url}), preloadGltfNamedResources:async () => { checks.named++; }, areGltfNamedResourcesReady: () => true },
     './fixedGltfResources': { resolveFigureConfig:async url => { checks.configs++; return {gltf:url.endsWith('/config.json')}; } },
     'webgal-lovelive-gltf-renderer': { OffscreenCharacter:Actor, CharacterRenderSurface:Surface },
@@ -847,4 +848,51 @@ test('switching loading modes on an empty stage releases the previous preload se
   assert.equal(f.hooks.tryPrepareStage(f.state([]), f.signal()), true);
   assert.equal(f.actors[0].disposed, true);
   assert.equal(f.surfaces[0].disposed, true);
+});
+
+
+test('offline event replay releases each retired actor without clearing the remaining stage', async () => {
+  const f=fixture(true),c='/c/config.json';
+  await f.hooks.prepareStage(f.state([['left',a],['right',b]]),f.signal());
+  const left=f.take('left',a),right=f.take('right',b);
+  const oldSurface=left.actor.surface;
+  await f.hooks.prepareStage(f.state([['right',b]]),f.signal());
+  assert.equal(left.actor.disposed,false,'outgoing actor remains drawable until its fade ends');
+  left.dispose();f.displayed.delete('left');
+  assert.equal(left.actor.disposed,true);
+  assert.equal(oldSurface.disposed,true,'unoccupied surface does not wait for unrelated active actors');
+  assert.equal(right.actor.disposed,false);
+  await f.hooks.prepareStage(f.state([['right',b],['new',c]]),f.signal());
+  const next=f.take('new',c);
+  await f.hooks.prepareStage(f.state([['right',b],['left',a]]),f.signal());
+  const returning=f.take('left',a);assert.notEqual(returning.actor,left.actor);
+  next.dispose();assert.equal(next.actor.disposed,true);
+  assert.equal(right.actor.disposed,false);
+  returning.dispose();right.dispose();f.hooks.releaseScene();
+  assert.equal(f.actors.every(actor=>actor.disposed),true);
+  assert.equal(f.surfaces.every(surface=>surface.disposed),true);
+});
+
+test('offline export never creates speculative GPU actors for future dialogue',async()=>{
+ const f=fixture(true);
+ await f.api.prewarmGltfPredictions([[{key:'future',figure:{url:a,motion:'',expression:''}}]]);
+ assert.equal(f.actors.length,0);
+});
+
+
+test('disposing an outgoing actor preserves a shared canvas still used by its replacement', async()=>{
+ const f=fixture(),c='/c/config.json';
+ f.setPlan({batches:[[{key:'left',figure:{url:a}},{key:'right',figure:{url:b}}],
+  [{key:'left',figure:{url:c}},{key:'right',figure:{url:b}}]],named:[]});
+ await f.hooks.prepareScene({sceneUrl:'scene.txt'},f.state([]),f.signal());
+ await f.hooks.prepareStage(f.state([['left',a],['right',b]]),f.signal());
+ const outgoing=f.take('left',a),other=f.take('right',b);
+ f.setMode('on-demand');
+ await f.hooks.prepareStage(f.state([['left',c],['right',b]]),f.signal());
+ const next=f.take('left',c),shared=outgoing.actor.surface;
+ assert.equal(next.actor.surface,shared);
+ outgoing.dispose();assert.equal(outgoing.actor.disposed,true);
+ assert.equal(shared.disposed,false);assert.equal(next.actor.disposed,false);assert.equal(other.actor.disposed,false);
+ next.dispose();assert.equal(shared.disposed,true);assert.equal(other.actor.disposed,false);
+ other.dispose();f.hooks.releaseScene();
 });
