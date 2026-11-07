@@ -158,8 +158,8 @@ export class GltfCharacterRuntime {
     this.focus = { ...value };
     this.character.setFocus(this.focus);
   }
-  public update(delta: number) {
-    if (this.isActive) this.character.update(delta);
+  public update(delta: number, render = true) {
+    if (this.isActive) this.character.update(delta, render);
   }
   public renderCurrentPose() {
     if (!this.isReady) throw new Error('glTF pose is not ready to render');

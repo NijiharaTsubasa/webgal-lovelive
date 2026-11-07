@@ -8,6 +8,7 @@ interface OfflineExportHost {
   scheduleAuto: typeof setTimeout;
   scheduleAssetMount(callback: () => void): void;
   characterFailed(error: unknown): void;
+  shouldRenderGltfFrames?(): boolean;
 }
 
 export const offlineExportHost = (globalThis as typeof globalThis & {

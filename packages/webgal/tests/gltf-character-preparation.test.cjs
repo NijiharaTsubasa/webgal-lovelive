@@ -155,3 +155,13 @@ test('experimental mesh cloth setting reaches residency options and direct actor
   await api.createGltfCharacter('game/a/config.json',1920,1080);
   for(const o of options){assert.equal(o.meshClothEnabled,true);assert.notEqual(o.physicsEnabled,false);}
 });
+
+
+test('glTF runtime forwards drawing policy while preserving elapsed animation time',()=>{
+ const calls=[],{GltfCharacterRuntime}=load();
+ const runtime=new GltfCharacterRuntime({update:(...args)=>calls.push(args),dispose(){}});
+ runtime.update(.1,false);runtime.update(.2);
+ assert.deepEqual(calls,[[.1,false],[.2,true]]);
+ runtime.dispose();runtime.update(.3,false);
+ assert.equal(calls.length,2);
+});

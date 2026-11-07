@@ -631,8 +631,9 @@ export default class PixiStage {
     const tick = () => {
       if (disposed || !runtime || !texture || !runtime.isActive) return;
       try {
-        runtime.update(((app?.ticker.elapsedMS ?? 0) * (app?.ticker.speed ?? 1)) / 1000);
-        texture.baseTexture.update();
+        const render = offlineExportHost?.shouldRenderGltfFrames?.() !== false;
+        runtime.update(((app?.ticker.elapsedMS ?? 0) * (app?.ticker.speed ?? 1)) / 1000, render);
+        if (render) texture.baseTexture.update();
       } catch (error) {
         logger.error('glTF character update failed', error);
         object.disposeGltf?.();

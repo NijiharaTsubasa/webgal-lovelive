@@ -22,7 +22,7 @@ function visit(node) {
 }
 visit(source);
 assert.ok(tickExpression, 'glTF ticker callback must exist');
-const makeTick = new Function('app', 'runtime', 'texture', 'disposed', 'fail', `return ${tickExpression};`);
+const makeTick = new Function('app', 'runtime', 'texture', 'disposed', 'fail', 'offlineExportHost', `return ${tickExpression};`);
 
 test('glTF consumes uncapped Pixi elapsed time and speed without changing other ticker listeners', () => {
   for (const speed of [0, .5, 1, 2, -1]) {
@@ -63,5 +63,24 @@ test('restarting the Pixi ticker resets its clock instead of counting time spent
     assert.ok(ticker.lastTime >= before);
     ticker.update(ticker.lastTime + 20);
     assert.ok(Math.abs(animation[0] - .02) < 1e-10);
+  } finally { ticker.destroy(); }
+});
+
+
+test('offline planning advances glTF animation without uploading a canvas; rendering resumes normally', () => {
+  const ticker = new Ticker(), updates = [];
+  let uploads = 0, render = false;
+  ticker.add(makeTick({ ticker }, { isActive: true, update(delta, draw) { updates.push([delta, draw]); } },
+    { baseTexture: { update() { uploads++; } } }, false, undefined,
+    { shouldRenderGltfFrames: () => render }));
+  try {
+    ticker.lastTime = 0;
+    ticker.update(100);
+    assert.deepEqual(updates, [[.1, false]]);
+    assert.equal(uploads, 0);
+    render = true;
+    ticker.update(200);
+    assert.deepEqual(updates, [[.1, false], [.1, true]]);
+    assert.equal(uploads, 1);
   } finally { ticker.destroy(); }
 });
